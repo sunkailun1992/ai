@@ -1,0 +1,38 @@
+{
+  "questionnaireCode": "symptom_triage_v1",
+  "version": "1.0.0",
+  "name": "症状初筛问卷",
+  "scene": "symptom_triage",
+  "targetSystem": "test-system",
+  "completionMessage": "症状初筛已完成。我已保存结构化答案，并生成待推送事件，后续可以继续分析病情或整理就医问题。",
+  "questions": [
+    {
+      "id": "EMERGENCY_SIGNS",
+      "label": "急危信号筛查",
+      "prompt": "我先确认有没有急症风险。你现在有没有胸痛、呼吸困难、意识模糊、单侧肢体无力、剧烈头痛、明显出血或严重过敏？",
+      "required": true,
+      "allowsAttachments": false
+    },
+    {
+      "id": "MAIN_SYMPTOM",
+      "label": "主要不适",
+      "prompt": "目前最主要的不舒服是什么？可以直接描述部位、感觉和严重程度。",
+      "required": true,
+      "allowsAttachments": false
+    },
+    {
+      "id": "ONSET_TIME",
+      "label": "起病时间",
+      "prompt": "这种不舒服大概从什么时候开始？是持续的，还是一阵一阵的？",
+      "required": true,
+      "allowsAttachments": false
+    },
+    {
+      "id": "RELATED_REPORT",
+      "label": "相关报告",
+      "prompt": "如果你有相关检查报告，可以上传报告图片或 PDF；如果没有，也可以直接说“没有报告”。",
+      "required": false,
+      "allowsAttachments": true
+    }
+  ]
+}
