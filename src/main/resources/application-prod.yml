@@ -53,9 +53,7 @@ spring:
       - "nacos:security-jwt.yaml?refreshEnabled=true"
       # swagger.yaml：OpenAPI/Swagger 展示公共开关与分组配置。
       - "optional:nacos:swagger.yaml?refreshEnabled=true"
-      # ai.yaml：AI 通用模型、注册中心、签名和文件能力配置。
-      - "optional:nacos:ai.yaml?refreshEnabled=true"
-      # ai-spring.yaml：AI 主服务 Spring、数据源和服务私有基础配置。
+      # ai-spring.yaml：本服务统一配置，包含框架/数据源与服务专属参数；原有共享配置覆盖顺序保持不变。
       - "optional:nacos:ai-spring.yaml?refreshEnabled=true"
       # qdrant.yaml：Qdrant 向量数据库连接配置，保留为可随时启用的向量库能力；是否实际连接由代码和开关控制。
       - "optional:nacos:qdrant.yaml?refreshEnabled=true"
