@@ -13,6 +13,8 @@ import com.kellen.questionnaire.ConversationalQuestionnaireService;
 import com.kellen.questionnaire.QuestionnaireChatResponse;
 import com.kellen.rag.RagRetrievalClient;
 
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
@@ -111,20 +113,24 @@ public class AiDialogueService {
      * @return Agent 逐段输出的 Flux。
      */
     public Flux<String> stream(AiChatRequest request, Long ownerUserId) {
+        Context entryParent = Context.current();
         return Flux.defer(() -> {
-            List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
-            String normalizedConversationId = memoryConversationId(request.conversationId());
-            java.util.Optional<QuestionnaireChatResponse> questionnaire = questionnaireService.continueActiveIfPresent(
-                    normalizedConversationId,
-                    ownerUserId == null ? "" : String.valueOf(ownerUserId),
-                    request.message(),
-                    request.effectiveAttachments());
-            if (questionnaire.isPresent()) {
-                return Flux.just(questionnaire.get().reply());
+            // 只恢复本次同步装配的入口上下文；Scope 不跨异步生命周期存活。
+            try (Scope ignored = entryParent.makeCurrent()) {
+                List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
+                String normalizedConversationId = memoryConversationId(request.conversationId());
+                java.util.Optional<QuestionnaireChatResponse> questionnaire = questionnaireService.continueActiveIfPresent(
+                        normalizedConversationId,
+                        ownerUserId == null ? "" : String.valueOf(ownerUserId),
+                        request.message(),
+                        request.effectiveAttachments());
+                if (questionnaire.isPresent()) {
+                    return Flux.just(questionnaire.get().reply());
+                }
+                chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
+                return streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
+                        media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), entryParent);
             }
-            chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
-            return streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
-                    media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId());
         }).onErrorResume(IllegalArgumentException.class, exception -> Flux.just(safeClientErrorMessage(exception)));
     }
 
@@ -141,6 +147,7 @@ public class AiDialogueService {
      * @param normalizedConversationId 归一化会话 ID。
      * @param patientId                患者 ID，用于检索长期记忆。
      * @param sourceTenantId           来源业务租户 ID。
+     * @param entryParent              公开入口捕获的上下文，订阅线程不得覆盖。
      * @return Agent 逐段输出的 Flux。
      */
     private Flux<String> streamInternal(String role,
@@ -152,7 +159,8 @@ public class AiDialogueService {
                                         Long ownerUserId,
                                         String normalizedConversationId,
                                         String patientId,
-                                        String sourceTenantId) {
+                                        String sourceTenantId,
+                                        Context entryParent) {
         String message = requiredText(rawMessage, "message");
         String mediaSummary = mediaInputValidator.summarize(media);
         AiRolePromptService.ResolvedPrompt resolvedPrompt = aiRolePromptService.resolve(role, instruction);
@@ -180,8 +188,13 @@ public class AiDialogueService {
                         patientId)
                 .transformDeferred(source -> {
                     var span = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business")
-                            .spanBuilder("ai.dialogue.stream").startSpan();
-                    return source.doFinally(signal -> {
+                            .spanBuilder("ai.dialogue.stream").setParent(entryParent).startSpan();
+                    Flux<String> scoped = Flux.from(subscriber -> {
+                        try (Scope ignored = span.makeCurrent()) {
+                            source.subscribe(subscriber);
+                        }
+                    });
+                    return scoped.doFinally(signal -> {
                         String outcome = signal == reactor.core.publisher.SignalType.CANCEL ? "cancelled"
                                 : signal == reactor.core.publisher.SignalType.ON_ERROR ? "error" : "success";
                         span.setAttribute("business.outcome", outcome);

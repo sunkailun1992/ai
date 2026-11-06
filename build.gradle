@@ -82,6 +82,7 @@ dependencies {
     implementation "com.aliyun.oss:aliyun-sdk-oss:${versions.aliyunOss}"        // 提供 OSS PostObject 签名策略和短时签名访问 URL。
     runtimeOnly "com.mysql:mysql-connector-j"                                  // 运行期连接 MySQL 的 JDBC 驱动。
     testImplementation "org.springframework.boot:spring-boot-starter-test"    // 提供 JUnit、Mockito 和 Spring Boot 测试基础能力。
+    testImplementation "io.opentelemetry:opentelemetry-sdk-testing:1.59.0" // 仅测试真实 service 的 trace 生命周期。
     testRuntimeOnly "com.h2database:h2"                                        // 测试环境使用内存数据库，避免依赖真实 MySQL。
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"               // 对齐 Gradle 与 JUnit Platform 运行器版本，避免测试发现阶段版本错配。
 }
