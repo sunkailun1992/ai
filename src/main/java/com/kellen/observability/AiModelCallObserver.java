@@ -4,7 +4,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 
@@ -40,9 +39,9 @@ public class AiModelCallObserver {
     }
 
     private void record(String provider, String model, String operation, String outcome, long startNanos) {
-        String safeProvider = tag(provider);
-        String safeModel = tag(model);
-        String safeOperation = tag(operation);
+        String safeProvider = "nacos-ai-registry".equals(provider) ? provider : "other";
+        String safeModel = "patient-analysis-agent".equals(model) ? model : "other";
+        String safeOperation = "chat_stream".equals(operation) ? operation : "other";
         Duration duration = Duration.ofNanos(Math.max(0, System.nanoTime() - startNanos));
         Timer.builder("ai.model.call.duration")
                 .description("AI model call duration")
@@ -62,7 +61,4 @@ public class AiModelCallObserver {
                 .increment();
     }
 
-    private String tag(String value) {
-        return StringUtils.hasText(value) ? value.trim() : "unknown";
-    }
 }

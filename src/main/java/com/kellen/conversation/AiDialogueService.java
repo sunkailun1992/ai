@@ -178,6 +178,17 @@ public class AiDialogueService {
                         "100",
                         sourceTenantId,
                         patientId)
+                .transformDeferred(source -> {
+                    var span = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business")
+                            .spanBuilder("ai.dialogue.stream").startSpan();
+                    return source.doFinally(signal -> {
+                        String outcome = signal == reactor.core.publisher.SignalType.CANCEL ? "cancelled"
+                                : signal == reactor.core.publisher.SignalType.ON_ERROR ? "error" : "success";
+                        span.setAttribute("business.outcome", outcome);
+                        if ("error".equals(outcome)) span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR);
+                        span.end();
+                    });
+                })
                 .doOnNext(content::append)
                 .doOnComplete(() -> {
                     String assistantContent = content.toString();

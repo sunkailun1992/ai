@@ -37,8 +37,6 @@
 - `rabbitmq.yaml`
 - `elasticsearch.yaml`
 - `seata.yaml`
-- `zipkin.yaml`
-- `admin.yaml`
 - `dubbo.yaml`
 - `xxl-job.yaml`
 - `a2a.yaml`

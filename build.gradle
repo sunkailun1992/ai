@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.kellen"                               // 发布坐标的 group，与 Java 包名保持一致。
-version = "1.5.2"                                  // 应用版本号；部署包名称由 bootJar 独立配置。
+version = "1.5.3"                                  // 应用版本号；部署包名称由 bootJar 独立配置。
 
 def privateMavenUrl = providers.gradleProperty("privateMavenUrl")
         .orElse(providers.environmentVariable("PRIVATE_MAVEN_URL"))
@@ -21,7 +21,7 @@ ext {
             springCloudAlibaba: "2025.1.0.0",      // Spring Cloud Alibaba 版本用于接入现有 Nacos 体系。
             nacosClient       : "3.2.2",           // Nacos Client 显式对齐当前配置中心 / 注册中心服务端。
             mybatisPlus       : "3.5.16",          // MyBatis-Plus 版本对齐 user/message。
-            utils             : "1.5.2",           // 公共 utils 包版本，复用 OSS token 模式、Dubbo RPC、流量治理上下文和公共配置绑定。
+            utils             : "1.5.3",           // 公共 utils 包版本，复用 OSS token 模式、Dubbo RPC、流量治理上下文和公共配置绑定。
             rpcApi            : "1.0.7",           // 公共 RPC 契约包版本，provider/consumer 必须保持一致。
             aliyunOss         : "3.17.4"           // 阿里云 OSS SDK 版本，沿用历史项目验证过的主版本。
     ]                                              // 版本表结束。
@@ -64,6 +64,8 @@ dependencyManagement {
     imports {                                      // 引入微服务 BOM，避免每个 Spring Cloud 模块手写版本。
         mavenBom "org.springframework.cloud:spring-cloud-dependencies:${versions.springCloud}" // 锁定 Spring Cloud 组件版本。
         mavenBom "com.alibaba.cloud:spring-cloud-alibaba-dependencies:${versions.springCloudAlibaba}" // 锁定 Nacos 适配版本。
+        // 对齐 utils 的 OpenTelemetry API/context/common，覆盖 Boot BOM 的较旧约束。
+        mavenBom "io.opentelemetry:opentelemetry-bom:1.59.0"
     }                                              // BOM 导入结束。
 }
 
