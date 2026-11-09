@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.kellen"                               // 发布坐标的 group，与 Java 包名保持一致。
-version = '1.6.1'                                  // 应用版本号；部署包名称由 bootJar 独立配置。
+version = '1.6.2'                                  // 应用版本号；部署包名称由 bootJar 独立配置。
 
 def privateMavenUrl = providers.gradleProperty("privateMavenUrl")
         .orElse(providers.environmentVariable("PRIVATE_MAVEN_URL"))
@@ -21,7 +21,7 @@ ext {
             springCloudAlibaba: "2025.1.0.0",      // Spring Cloud Alibaba 版本用于接入现有 Nacos 体系。
             nacosClient       : "3.2.2",           // Nacos Client 显式对齐当前配置中心 / 注册中心服务端。
             mybatisPlus       : "3.5.16",          // MyBatis-Plus 版本对齐 user/message。
-            utils             : "1.6.1",           // 公共 utils 包版本，统一 PostgreSQL 数据源与安全观测能力。
+            utils             : "1.6.2",           // 公共 utils 包版本，统一 PostgreSQL 数据源与安全观测能力。
             rpcApi            : "1.0.7",           // 公共 RPC 契约包版本，provider/consumer 必须保持一致。
             aliyunOss         : "3.17.4"           // 阿里云 OSS SDK 版本，沿用历史项目验证过的主版本。
     ]                                              // 版本表结束。
