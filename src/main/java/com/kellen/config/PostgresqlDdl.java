@@ -9,14 +9,14 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * MyBatis-Plus 自动维护 AI 服务 DDL。
+ * MyBatis-Plus 自动维护 AI 服务 PostgreSQL DDL。
  *
  * <p>AI 服务表结构从 JPA 自动建表切换为 SQL 脚本维护，便于后续发布时
  * 明确审阅表结构、索引、唯一约束和字段注释。</p>
  */
 @Component
 @ConditionalOnProperty(prefix = "ai.ddl", name = "enabled", havingValue = "true", matchIfMissing = true)
-public class MysqlDdl implements IDdl {
+public class PostgresqlDdl implements IDdl {
 
     private final DataSource dataSource;
 
@@ -25,7 +25,7 @@ public class MysqlDdl implements IDdl {
      *
      * @param dataSource 当前服务数据源。
      */
-    public MysqlDdl(DataSource dataSource) {
+    public PostgresqlDdl(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
@@ -46,6 +46,9 @@ public class MysqlDdl implements IDdl {
      */
     @Override
     public List<String> getSqlFiles() {
-        return List.of("db/ai-init.sql", "db/ai-file-storage-platform.sql");
+        return List.of(
+                "db/postgresql/common-infra-schema.sql",
+                "db/postgresql/ai-schema.sql"
+        );
     }
 }

@@ -1,6 +1,7 @@
 package com.kellen.memory;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 检索索引，使用 embedding_status/vector_* 字段跟踪同步状态。</p>
  */
 @TableName("ai_patient_memory")
-public class PatientMemoryEntity {
+public class PatientMemoryEntity extends AiGovernanceEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
     public static final String EMBEDDING_PENDING = "PENDING";

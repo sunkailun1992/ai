@@ -1,6 +1,7 @@
 package com.kellen.conversation;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 真正回放给模型的消息仍保存在 ai_chat_memory 表。</p>
  */
 @TableName("ai_chat_conversation")
-public class ChatConversationEntity {
+public class ChatConversationEntity extends AiGovernanceEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE"; // 正常可见会话状态。
     public static final String STATUS_DELETED = "DELETED"; // 用户删除后的隐藏状态。

@@ -1,6 +1,7 @@
 package com.kellen.auth;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 退出登录或过期后该 token 不再可用。</p>
  */
 @TableName("ai_wechat_session")
-public class AiWechatSessionEntity {
+public class AiWechatSessionEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 会话 ID。

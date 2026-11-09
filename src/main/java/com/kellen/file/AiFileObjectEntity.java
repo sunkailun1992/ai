@@ -1,6 +1,7 @@
 package com.kellen.file;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 图片、PDF、JSON 等资料展示时必须走后端 token 校验和短时签名跳转。</p>
  */
 @TableName("ai_file_object")
-public class AiFileObjectEntity {
+public class AiFileObjectEntity extends AiGovernanceEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE"; // 文件可展示状态。
 

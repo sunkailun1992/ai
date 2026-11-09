@@ -1,6 +1,7 @@
 package com.kellen.audit;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 与 ai_chat_memory 记忆表是两条独立链路：审计永久保留，记忆可被调用方清空。</p>
  */
 @TableName("ai_chat_message")
-public class ChatMessageEntity {
+public class ChatMessageEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 审计记录主键。

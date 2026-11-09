@@ -1,6 +1,7 @@
 package com.kellen.memory;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
  * 互相独立：记忆可被调用方清空，审计永久保留。</p>
  */
 @TableName("ai_chat_memory")
-public class ChatMemoryEntity {
+public class ChatMemoryEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 记忆记录主键。

@@ -1,6 +1,7 @@
 package com.kellen.agent;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -10,7 +11,7 @@ import java.time.LocalDateTime;
  * AI 默认模型选择配置。
  */
 @TableName("ai_model_selection")
-public class AiModelSelectionEntity {
+public class AiModelSelectionEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id;

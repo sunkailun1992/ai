@@ -1,6 +1,7 @@
 package com.kellen.integration;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 后台任务后续再负责推送 SaaS、CGA、五云山或医院系统，失败可重试。</p>
  */
 @TableName("ai_integration_outbox")
-public class IntegrationOutboxEntity {
+public class IntegrationOutboxEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // outbox 事件 ID。

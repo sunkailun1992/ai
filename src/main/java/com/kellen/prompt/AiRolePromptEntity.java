@@ -1,6 +1,7 @@
 package com.kellen.prompt;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
  * 长期固化在 application.yml 中。</p>
  */
 @TableName("ai_role_prompt")
-public class AiRolePromptEntity {
+public class AiRolePromptEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 角色提示词主键。

@@ -1,6 +1,7 @@
 package com.kellen.auth;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 仅作为 AI 小程序展示和后续患者档案绑定的轻量账户信息。</p>
  */
 @TableName("ai_wechat_user")
-public class AiWechatUserEntity {
+public class AiWechatUserEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 用户 ID。

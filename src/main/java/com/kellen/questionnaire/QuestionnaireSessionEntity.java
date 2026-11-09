@@ -1,6 +1,7 @@
 package com.kellen.questionnaire;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 进行中的会话优先接管后续自然语言输入，直到用户暂停退出或问卷完成。</p>
  */
 @TableName("ai_questionnaire_session")
-public class QuestionnaireSessionEntity {
+public class QuestionnaireSessionEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 问卷会话 ID。

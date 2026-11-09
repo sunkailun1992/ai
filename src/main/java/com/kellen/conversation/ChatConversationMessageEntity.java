@@ -1,6 +1,7 @@
 package com.kellen.conversation;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * 模型上下文仍由 ai_chat_memory 维护，审计仍由 ai_chat_message 维护。</p>
  */
 @TableName("ai_chat_conversation_message")
-public class ChatConversationMessageEntity {
+public class ChatConversationMessageEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 展示消息 ID。

@@ -22,9 +22,9 @@
 
 - 项目名称：`ai`
 - 项目类型：患者分析与多模态报告解读后端
-- 技术栈：Java 17、Spring Boot 4、Spring AI、Spring Cloud Alibaba、Nacos、Dubbo、MyBatis-Plus、MySQL、Gradle Wrapper、`com:rpc-api`、`com:utils`
+- 技术栈：Java 17、Spring Boot 4、Spring AI、Spring Cloud Alibaba、Nacos、Dubbo、MyBatis-Plus、PostgreSQL、Gradle Wrapper、`com:rpc-api`、`com:utils`
 - 外部模型：Google Gemini、DeepSeek/OpenAI-compatible、通义千问 DashScope/OpenAI-compatible（由 `ai-agent` 执行层配置）
-- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.5.5`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
+- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.6.0`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
 - 核心风险：模型 Provider 选错、医疗 Prompt 污染、外部媒体 URL SSRF、重新引入 AI 对话文件流入口、密钥泄露、患者资料越权、会话历史越权、日志输出用户隐私
 
 ## 修改前阅读顺序
@@ -61,9 +61,9 @@
 - 微信小程序登录接口统一放在 `/api/auth`，用户写入 `ai_wechat_user`，登录态写入 `ai_wechat_session`；小程序端只能保存 Bearer token，不能保存 appSecret、openid 或 sessionKey。
 - 小程序文件上传采用后端签发 OSS PostObject 策略、小程序直传、后端完成登记的模式；业务侧只保存 `ai_file_object.object_key` 和展示 token 哈希，禁止把公共 OSS URL 作为业务文件地址保存或传给 AI。
 - 文件展示和 AI 多模态附件 URL 必须使用后端令牌地址 `/api/v1/files/{fileId}/view?token=...`；后端校验 token 后再生成短时签名 OSS URL，HEAD 请求必须返回真实 Content-Type 供多模态校验器使用。
-- 新增或修改 MyBatis-Plus 实体时，必须同步更新 `src/main/resources/db/ai-init.sql` 的表、字段中文注释和 `src/test/resources/schema.sql`，字段含义要能直接支撑数据库查看和外部系统对接。
+- 新增或修改 MyBatis-Plus 实体时，必须同步新增或维护 `src/main/resources/db/postgresql/` 的 PostgreSQL 表、字段中文注释和 `src/test/resources/schema.sql`；历史 MySQL 脚本不回改，已执行的 PG 脚本追加增量，并补齐相应测试。字段含义要能直接支撑数据库查看和外部系统对接。
 - 新增业务表必须补齐公共治理字段；数据库列 `version` 只做乐观锁，Prompt、模板、协议等业务版本使用 `prompt_version`、`template_version`、`protocol_version` 等明确列名。
-- AI 服务全新或清空后的业务库首次启动前，建议先在目标业务库手动执行 `db/ai-init.sql`；该脚本已包含 `ddl_history` 和 Seata AT `undo_log`，不能依赖应用首次启动自动创建基础表。
+- AI 服务全新或清空后的业务库首次启动前，必须先在目标业务库手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行 `db/postgresql/ai-schema.sql`；公共脚本包含 `ddl_history` 和 Seata AT `undo_log`，不能依赖应用首次启动自动创建基础表。
 - 多模态附件只能使用配置白名单协议，默认 `http` / `https`；文件、图片、PDF、JSON 问卷必须先上传到业务文件服务或 OSS，再把可访问 URL 传入 `attachments`。
 - 小程序侧只能暴露一个 AI 对话框，但必须支持按登录用户恢复、切换和重命名多个 `conversationId`；会话列表、新建对话和开始问卷入口放在左侧抽屉，不放在输入区快捷按钮。后端必须区分普通患者对话、报告/附件分析和对话式问卷，优先通过按钮 action、进行中问卷状态和附件上下文路由，不能只依赖模型猜意图。
 - 重命名对话必须走后端接口并校验当前登录用户归属，不能只改小程序本地列表标题。

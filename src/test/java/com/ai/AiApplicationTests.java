@@ -2,6 +2,15 @@ package com.ai;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import com.kellen.agent.AiModelSelectionEntity;
+import com.kellen.agent.AiModelSelectionRepository;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 应用上下文加载测试。
@@ -35,6 +44,38 @@ import org.springframework.boot.test.context.SpringBootTest;
         "logging.file.name=build/logs/ai-test.log" // 覆盖 dev 段的 ./logs/ai.log，避免构建后工作区出现未跟踪日志。
 })
 class AiApplicationTests {
+
+    @Autowired
+    private AiModelSelectionRepository modelSelections;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    /** MySQL ON UPDATE 移除后，实际 Mapper 插入、已加载非空时间的更新仍由共享填充器维护。 */
+    @Test
+    void mapperMaintainsGovernanceTimestampWithoutExposingANewJsonField() throws Exception {
+        AiModelSelectionEntity entity = AiModelSelectionEntity.create("pg-fixture-" + UUID.randomUUID(), "google");
+        try {
+            modelSelections.save(entity);
+            LocalDateTime inserted = jdbc.queryForObject(
+                    "SELECT modify_date_time FROM ai_model_selection WHERE id = ?", LocalDateTime.class, entity.getId());
+            assertThat(inserted).isAfter(LocalDateTime.of(2020, 1, 1, 0, 0));
+            jdbc.update("UPDATE ai_model_selection SET modify_date_time = ? WHERE id = ?",
+                    LocalDateTime.of(2000, 1, 1, 0, 0), entity.getId());
+            AiModelSelectionEntity loaded = modelSelections.findById(entity.getId()).orElseThrow();
+            loaded.setProvider("qwen");
+            modelSelections.save(loaded);
+            LocalDateTime updated = jdbc.queryForObject(
+                    "SELECT modify_date_time FROM ai_model_selection WHERE id = ?", LocalDateTime.class, entity.getId());
+            assertThat(updated).isAfter(LocalDateTime.of(2020, 1, 1, 0, 0));
+            assertThat(new tools.jackson.databind.ObjectMapper().writeValueAsString(loaded))
+                    .doesNotContain("modifyDateTime", "modify_date_time");
+        } finally {
+            if (entity.getId() != null) {
+                modelSelections.deleteById(entity.getId());
+            }
+        }
+    }
 
     /**
      * 空测试体：上下文启动成功即通过，启动失败即失败。

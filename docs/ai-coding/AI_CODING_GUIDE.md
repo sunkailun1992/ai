@@ -38,7 +38,6 @@
 - `elasticsearch.yaml`
 - `seata.yaml`
 - `dubbo.yaml`
-- `xxl-job.yaml`
 - `a2a.yaml`
 
 `ai.yaml` 必须配置：
@@ -116,13 +115,13 @@
 
 ## 8. 数据库规则
 
-- 表结构和种子数据由 `MysqlDdl.java` 加载 `src/main/resources/db/ai-init.sql` 初始化。
+- 表结构和种子数据由 `PostgresqlDdl.java` 加载 `src/main/resources/db/ai-init.sql` 初始化。
 - 全新或清空后的业务库首次启动前，建议先在目标业务库手动执行 `db/ai-init.sql`；Seata AT 会在 `DataSource` 初始化时先检查 `undo_log`，不能依赖 MyBatis-Plus DDL 首次启动自动创建该表。
 - 新增表、字段、索引和种子数据统一同步到 `db/ai-init.sql`。
 - 测试环境使用 `src/test/resources/schema.sql`。
 - 数据库访问统一使用 MyBatis-Plus Repository。
 - 不拼接用户输入形成 SQL。
-- 新增字段必须同步 MySQL DDL 注释和 H2 测试 schema。
+- 新增字段必须同步 PostgreSQL DDL 注释和 H2 测试 schema。
 - 新增业务表默认补齐公共治理字段：`code`、`description`、`create_date_time`、`create_name`、`modify_date_time`、`modify_name`、`is_delete`、`type`、`state`、`label`、`sorting`、`version`、`tenant_id`。
 - 数据库列 `version` 只表示乐观锁版本号；Prompt、问卷模板、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
 - 现有 AI 业务表保留 `bigint` 自增主键和 `created_at` / `updated_at` 运行时字段，后续新增通用后台管理型业务表再优先继承 `EntityBase`。
@@ -150,3 +149,5 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 ```
 
 涉及 Nacos AI Registry、Agent 接口、DDL、问卷状态机、文件 token 或会话归属时，必须执行相关测试或说明无法执行原因。
+
+个人 XXL-JOB 已退役，不再新增其依赖、配置类或 `xxl-job.yaml` 导入。调度选用 NAS 独立 Conductor OSS，通过 REST 接入；业务 Java 调度接口尚未实现，保持 Java 17，不为此引入要求 Java 21 的最新 SDK。

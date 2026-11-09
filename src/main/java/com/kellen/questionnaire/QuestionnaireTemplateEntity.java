@@ -1,6 +1,7 @@
 package com.kellen.questionnaire;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
  * 小程序可以只有一个 AI 对话框，但后端必须通过 questionnaireCode/version 精确区分问卷。</p>
  */
 @TableName("ai_questionnaire_template")
-public class QuestionnaireTemplateEntity {
+public class QuestionnaireTemplateEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 模板记录 ID。

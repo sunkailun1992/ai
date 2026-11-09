@@ -1,6 +1,7 @@
 package com.kellen.memory;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
  * lossless 窗口的旧消息摘要，ai_chat_memory 继续保存最近原文消息。</p>
  */
 @TableName("ai_chat_memory_summary")
-public class ChatMemorySummaryEntity {
+public class ChatMemorySummaryEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 摘要主键。

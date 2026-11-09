@@ -1,6 +1,7 @@
 package com.kellen.questionnaire;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
  * 附件在问卷模式下归属当前题目，而不是切换到普通报告分析流程。</p>
  */
 @TableName("ai_questionnaire_answer")
-public class QuestionnaireAnswerEntity {
+public class QuestionnaireAnswerEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 答案记录 ID。
