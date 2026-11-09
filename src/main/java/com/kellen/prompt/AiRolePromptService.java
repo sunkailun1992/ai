@@ -49,10 +49,10 @@ public class AiRolePromptService {
         Optional<AiRolePromptEntity> rolePrompt = findRolePrompt(requestedRole);
         if (rolePrompt.isPresent()) {
             AiRolePromptEntity entity = rolePrompt.get();
-            return new ResolvedPrompt(entity.getRoleKey(), entity.getRoleName(), appendSupplementalPrompt(entity.getSystemPrompt(), supplementalPrompt));
+            return new ResolvedPrompt(entity.getRoleKey(), entity.getRoleName(), appendSupplementalPrompt(entity.getSystemPrompt(), supplementalPrompt), entity.getVersion(), "database");
         }
         if (!StringUtils.hasText(requestedRole)) {
-            return new ResolvedPrompt(defaultRole, defaultRole, appendSupplementalPrompt(fallbackPrompt, supplementalPrompt));
+            return new ResolvedPrompt(defaultRole, defaultRole, appendSupplementalPrompt(fallbackPrompt, supplementalPrompt), "unknown", "fallback");
         }
         throw new IllegalArgumentException("unsupported ai role: " + requestedRole + ", supported roles: " + supportedRoles());
     }
@@ -130,6 +130,14 @@ public class AiRolePromptService {
      * @param roleName     角色名称。
      * @param systemPrompt 最终系统提示词。
      */
-    public record ResolvedPrompt(String role, String roleName, String systemPrompt) {
+    public record ResolvedPrompt(String role, String roleName, String systemPrompt, String version, String source) {
+        public ResolvedPrompt(String role, String roleName, String systemPrompt) {
+            this(role, roleName, systemPrompt, "unknown", "unknown");
+        }
+
+        @Override
+        public String toString() {
+            return "ResolvedPrompt[role=" + role + ", version=" + version + ", source=" + source + "]";
+        }
     }
 }

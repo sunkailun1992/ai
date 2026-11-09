@@ -115,8 +115,10 @@ public class AiDialogueService {
     public Flux<String> stream(AiChatRequest request, Long ownerUserId) {
         Context entryParent = Context.current();
         return Flux.defer(() -> {
-            // 只恢复本次同步装配的入口上下文；Scope 不跨异步生命周期存活。
-            try (Scope ignored = entryParent.makeCurrent()) {
+            DialogueObservation observation = new DialogueObservation(entryParent);
+            Flux<String> execution;
+            // 整轮 span 在 RAG/记忆预取前建立，Scope 仅覆盖当前线程的装配与订阅。
+            try (Scope ignored = observation.span.makeCurrent()) {
                 List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
                 String normalizedConversationId = memoryConversationId(request.conversationId());
                 java.util.Optional<QuestionnaireChatResponse> questionnaire = questionnaireService.continueActiveIfPresent(
@@ -125,12 +127,24 @@ public class AiDialogueService {
                         request.message(),
                         request.effectiveAttachments());
                 if (questionnaire.isPresent()) {
-                    return Flux.just(questionnaire.get().reply());
+                    execution = Flux.just(questionnaire.get().reply());
+                } else {
+                    chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
+                    execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
+                            media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation);
                 }
-                chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
-                return streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
-                        media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), entryParent);
+            } catch (RuntimeException error) {
+                observation.failed();
+                observation.finish(reactor.core.publisher.SignalType.ON_ERROR);
+                return Flux.error(error);
             }
+            Flux<String> source = execution;
+            Flux<String> scoped = Flux.from(subscriber -> {
+                try (Scope ignored = observation.span.makeCurrent()) {
+                    source.subscribe(subscriber);
+                }
+            });
+            return scoped.doOnError(error -> observation.failed()).doFinally(observation::finish);
         }).onErrorResume(IllegalArgumentException.class, exception -> Flux.just(safeClientErrorMessage(exception)));
     }
 
@@ -147,7 +161,7 @@ public class AiDialogueService {
      * @param normalizedConversationId 归一化会话 ID。
      * @param patientId                患者 ID，用于检索长期记忆。
      * @param sourceTenantId           来源业务租户 ID。
-     * @param entryParent              公开入口捕获的上下文，订阅线程不得覆盖。
+     * @param observation              整轮编排的观测上下文。
      * @return Agent 逐段输出的 Flux。
      */
     private Flux<String> streamInternal(String role,
@@ -160,12 +174,13 @@ public class AiDialogueService {
                                         String normalizedConversationId,
                                         String patientId,
                                         String sourceTenantId,
-                                        Context entryParent) {
+                                        DialogueObservation observation) {
         String message = requiredText(rawMessage, "message");
         String mediaSummary = mediaInputValidator.summarize(media);
         AiRolePromptService.ResolvedPrompt resolvedPrompt = aiRolePromptService.resolve(role, instruction);
-        String historyContext = historyContext(normalizedConversationId, patientId, sourceTenantId);
-        String ragContext = ragRetrievalClient.retrieveContext(message, normalizedConversationId);
+        observation.prompt(resolvedPrompt);
+        String historyContext = observation.step("memory.context", () -> historyContext(normalizedConversationId, patientId, sourceTenantId));
+        String ragContext = observation.step("rag.prefetch", () -> ragRetrievalClient.retrieveContext(message, normalizedConversationId));
         long startedAt = modelCallObserver.start();
         StringBuilder content = new StringBuilder();
 
@@ -186,41 +201,26 @@ public class AiDialogueService {
                         "100",
                         sourceTenantId,
                         patientId)
-                .transformDeferred(source -> {
-                    var span = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business")
-                            .spanBuilder("ai.dialogue.stream").setParent(entryParent).startSpan();
-                    Flux<String> scoped = Flux.from(subscriber -> {
-                        try (Scope ignored = span.makeCurrent()) {
-                            source.subscribe(subscriber);
-                        }
-                    });
-                    return scoped.doFinally(signal -> {
-                        String outcome = signal == reactor.core.publisher.SignalType.CANCEL ? "cancelled"
-                                : signal == reactor.core.publisher.SignalType.ON_ERROR ? "error" : "success";
-                        span.setAttribute("business.outcome", outcome);
-                        if ("error".equals(outcome)) span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR);
-                        span.end();
-                    });
-                })
                 .doOnNext(content::append)
-                .doOnComplete(() -> {
+                .doOnComplete(() -> observation.run(() -> {
                     String assistantContent = content.toString();
                     modelCallObserver.success(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
                     chatAuditService.recordSuccess(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), assistantContent, mediaSummary);
                     dbChatMemoryService.addMessage(normalizedConversationId, "assistant", assistantContent);
                     chatConversationMessageService.recordAssistantMessage(ownerUserId, normalizedConversationId, assistantContent);
-                })
-                .doOnError(exception -> {
+                }))
+                .doOnError(exception -> observation.run(() -> {
+                    observation.failed();
                     modelCallObserver.failure(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
                     chatAuditService.recordFailure(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), rootMessage(exception), mediaSummary);
-                })
-                .doOnCancel(() -> {
+                }))
+                .doOnCancel(() -> observation.run(() -> {
                     modelCallObserver.cancelled(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
                     chatAuditService.recordFailure(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), "stream cancelled by client", mediaSummary);
-                })
+                }))
                 .onErrorResume(exception -> Flux.just(safeStreamErrorMessage(exception)));
     }
 
@@ -246,6 +246,60 @@ public class AiDialogueService {
         String normalized = memoryConversationId(conversationId);
         dbChatMemoryService.clear(normalized);
         return AiChatResponse.ok(null, "memory cleared: " + normalized);
+    }
+
+    /** 有限编排步骤；不记录用户内容，不把固定调用冒充模型工具。 */
+    private static final class DialogueObservation {
+        private final io.opentelemetry.api.trace.Tracer tracer = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business");
+        private final io.opentelemetry.api.trace.Span span;
+        private final java.util.concurrent.atomic.AtomicBoolean ended = new java.util.concurrent.atomic.AtomicBoolean();
+        private volatile boolean failed;
+
+        private DialogueObservation(Context parent) {
+            span = tracer.spanBuilder("ai.dialogue.stream").setParent(parent).startSpan();
+        }
+
+        private void prompt(AiRolePromptService.ResolvedPrompt prompt) {
+            span.setAttribute("fleet.ai.prompt.key", metadata(prompt.role()));
+            span.setAttribute("fleet.ai.prompt.version", metadata(prompt.version()));
+            span.setAttribute("fleet.ai.prompt.source", metadata(prompt.source()));
+        }
+
+        private <T> T step(String name, java.util.function.Supplier<T> action) {
+            var child = tracer.spanBuilder(name).startSpan();
+            try (Scope ignored = child.makeCurrent()) {
+                T result = action.get();
+                child.setAttribute("business.outcome", result instanceof String text && text.isBlank() ? "empty" : "success");
+                return result;
+            } catch (RuntimeException error) {
+                child.setAttribute("business.outcome", "error");
+                child.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR);
+                throw error;
+            } finally {
+                child.end();
+            }
+        }
+
+        private void run(Runnable action) {
+            try (Scope ignored = span.makeCurrent()) {
+                action.run();
+            }
+        }
+
+        private void failed() { failed = true; }
+
+        private void finish(reactor.core.publisher.SignalType signal) {
+            if (ended.compareAndSet(false, true)) {
+                String outcome = signal == reactor.core.publisher.SignalType.CANCEL ? "cancelled" : failed ? "error" : "success";
+                span.setAttribute("business.outcome", outcome);
+                if ("error".equals(outcome)) span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR);
+                span.end();
+            }
+        }
+
+        private static String metadata(String value) {
+            return value != null && value.matches("[A-Za-z0-9_.-]{1,128}") ? value : "unknown";
+        }
     }
 
     private String historyContext(String conversationId, String patientId, String sourceTenantId) {

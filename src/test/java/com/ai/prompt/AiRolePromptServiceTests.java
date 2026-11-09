@@ -38,6 +38,9 @@ class AiRolePromptServiceTests {
         assertEquals("patient-analysis", prompt.role()); // 默认角色 key 正确。
         assertEquals("患者分析助手", prompt.roleName()); // 角色名称来自数据库。
         assertTrue(prompt.systemPrompt().contains("不能替代医生诊断")); // 医疗安全边界保留。
+        assertEquals("test", prompt.version());
+        assertEquals("database", prompt.source());
+        assertTrue(!prompt.toString().contains(prompt.systemPrompt()));
     }
 
     /**
@@ -88,6 +91,8 @@ class AiRolePromptServiceTests {
         assertEquals("patient-analysis", prompt.role()); // 仍使用默认角色 key。
         assertTrue(prompt.systemPrompt().contains("兜底患者分析提示词")); // 使用配置兜底。
         assertTrue(prompt.systemPrompt().contains("简短输出")); // 补充要求仍被追加。
+        assertEquals("unknown", prompt.version());
+        assertEquals("fallback", prompt.source());
     }
 
     /**

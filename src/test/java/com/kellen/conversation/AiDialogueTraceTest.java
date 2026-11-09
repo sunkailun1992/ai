@@ -36,6 +36,8 @@ class AiDialogueTraceTest {
     private SdkTracerProvider provider;
     private AiDialogueService service;
     private AiAgentClient agent;
+    private RagRetrievalClient rag;
+    private ChatAuditService audit;
 
     @BeforeEach
     void setUp() {
@@ -54,9 +56,11 @@ class AiDialogueTraceTest {
         when(media.summarize(any())).thenReturn("");
         when(prompt.resolve(any(), any())).thenReturn(new AiRolePromptService.ResolvedPrompt("patient-analysis", "fixture", "synthetic"));
         agent = mock(AiAgentClient.class);
-        service = new AiDialogueService(memory, media, mock(ChatAuditService.class), prompt,
+        rag = mock(RagRetrievalClient.class);
+        audit = mock(ChatAuditService.class);
+        service = new AiDialogueService(memory, media, audit, prompt,
                 mock(ChatConversationService.class), mock(ChatConversationMessageService.class), questionnaire,
-                patient, mock(AiModelCallObserver.class), agent, mock(RagRetrievalClient.class));
+                patient, mock(AiModelCallObserver.class), agent, rag);
     }
 
     @AfterEach
@@ -79,6 +83,51 @@ class AiDialogueTraceTest {
 
     private List<SpanData> businessSpans() {
         return exporter.getFinishedSpanItems().stream().filter(span -> span.getName().equals("ai.dialogue.stream")).toList();
+    }
+
+    @Test
+    void asyncTerminalPersistenceUsesTheDialogueContextAndRestoresTheWorker() {
+        doAnswer(invocation -> {
+            var child = GlobalOpenTelemetry.getTracer("test").spanBuilder("fixture.audit.write").startSpan();
+            child.end();
+            return null;
+        }).when(audit).recordSuccess(any(), any(), any(), any(), any(), any(), any());
+        var worker = reactor.core.scheduler.Schedulers.newSingle("dialogue-terminal-test");
+        Span parent = parent("entry");
+        try {
+            assertEquals(List.of("synthetic-output"), assemble(parent, Flux.just("synthetic-output").publishOn(worker))
+                    .collectList().block());
+            org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(() -> assertEquals(1, businessSpans().size()));
+            var auditSpan = exporter.getFinishedSpanItems().stream().filter(span -> span.getName().equals("fixture.audit.write"))
+                    .findFirst().orElseThrow();
+            assertEquals(businessSpans().get(0).getSpanId(), auditSpan.getParentSpanId());
+            assertEquals(parent.getSpanContext().getTraceId(), auditSpan.getTraceId());
+            assertFalse(reactor.core.publisher.Mono.fromCallable(() -> Span.current().getSpanContext().isValid())
+                    .subscribeOn(worker).block());
+        } finally {
+            worker.dispose();
+            parent.end();
+        }
+    }
+
+    @Test
+    void wholeDialogueSpanIncludesTheActualRagPrefetch() {
+        when(rag.retrieveContext(any(), any())).thenAnswer(invocation -> {
+            var child = GlobalOpenTelemetry.getTracer("test").spanBuilder("fixture.rag.rpc").startSpan();
+            child.end();
+            return "";
+        });
+        Span parent = parent("entry");
+        assertEquals(List.of("synthetic-output"), assemble(parent, Flux.just("synthetic-output")).collectList().block());
+        var dialogue = businessSpans().get(0);
+        var child = exporter.getFinishedSpanItems().stream().filter(span -> span.getName().equals("fixture.rag.rpc"))
+                .findFirst().orElseThrow();
+        var prefetch = exporter.getFinishedSpanItems().stream().filter(span -> span.getSpanId().equals(child.getParentSpanId()))
+                .findFirst().orElseThrow();
+        assertEquals(dialogue.getTraceId(), child.getTraceId());
+        assertTrue(prefetch.getSpanId().equals(dialogue.getSpanId()) || prefetch.getParentSpanId().equals(dialogue.getSpanId()));
+        parent.end();
     }
 
     private void assertParent(SpanData span, Span parent, String outcome) {
