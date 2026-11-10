@@ -2,6 +2,8 @@ package com.kellen.conversation;
 
 import com.kellen.auth.AiWechatUserEntity;
 import com.kellen.auth.WechatAuthService;
+import com.kellen.auth.AiRequestIdentityResolver;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.kellen.memory.ChatMemoryMessageDto;
 
 import org.springframework.http.HttpStatus;
@@ -33,6 +35,7 @@ public class AiDialogueController {
     private final AiDialogueService dialogueService; // 对话编排服务，隔离 Controller 与 Spring AI 细节。
     private final WechatAuthService authService; // 微信认证服务，用于小程序会话归属。
     private final ChatConversationService conversationService; // 会话元数据服务，用于恢复和切换对话。
+    private final AiRequestIdentityResolver identities;
 
     /**
      * 构造器注入对话服务，依赖显式化便于测试。
@@ -44,9 +47,16 @@ public class AiDialogueController {
     public AiDialogueController(AiDialogueService dialogueService,
                                 WechatAuthService authService,
                                 ChatConversationService conversationService) {
+        this(dialogueService, authService, conversationService, null);
+    }
+
+    @Autowired
+    public AiDialogueController(AiDialogueService dialogueService, WechatAuthService authService,
+                                ChatConversationService conversationService, AiRequestIdentityResolver identities) {
         this.dialogueService = dialogueService; // 保存对话服务实例。
         this.authService = authService; // 保存微信认证服务实例。
         this.conversationService = conversationService; // 保存会话元数据服务实例。
+        this.identities = identities;
     }
 
     /**
@@ -62,7 +72,7 @@ public class AiDialogueController {
     /**
      * SSE 流式对话，支持纯文本和远程媒体 URL。
      *
-     * @param authorization Authorization Header，可选；小程序登录后用于登记用户会话列表。
+     * @param authorization User 中心签发的有效 Bearer access JWT；微信 opaque 登录态不代表租户授权。
      * @param request       用户文本、可选会话 ID、角色、本轮补充要求和远程附件 URL。
      * @return 模型逐段输出的文本流。
      */
@@ -70,8 +80,9 @@ public class AiDialogueController {
     public Flux<String> chat(@RequestHeader(value = "Authorization", required = false) String authorization,
                              @RequestBody AiChatRequest request) {
         try {
-            Long ownerUserId = currentUserIdOrNull(authorization); // 小程序登录调用会登记会话，Postman 无登录调用仍可测试。
-            return dialogueService.stream(request, ownerUserId); // 委托 Service 发起 Spring AI 流式调用。
+            // fleet subject 与微信 owner 属于不同身份空间，不能把同值 ID 当成同一个微信用户。
+            if (identities == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI_IDENTITY_UNAVAILABLE");
+            return dialogueService.stream(request, null, identities.requireIdentity(authorization));
         } catch (IllegalArgumentException exception) {
             return Flux.just("\n[请求参数错误] " + exception.getMessage()); // SSE 请求直接返回文本错误。
         }
@@ -155,8 +166,12 @@ public class AiDialogueController {
      * @return 按时间正序排列的记忆消息列表。
      */
     @GetMapping("/memory/{conversationId}") // 记忆查询接口。
-    public List<ChatMemoryMessageDto> memory(@PathVariable String conversationId) {
-        return dialogueService.memoryMessages(conversationId); // 委托 Service 读取记忆窗口内的消息。
+    public List<ChatMemoryMessageDto> memory(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                           @PathVariable String conversationId) {
+        var identity = identities.requireIdentity(authorization);
+        try (var tenant = identity.bindTenant()) {
+            return dialogueService.memoryMessages(identity.conversationKey(conversationId));
+        }
     }
 
     /**
@@ -166,15 +181,12 @@ public class AiDialogueController {
      * @return 清空结果的统一响应。
      */
     @DeleteMapping("/memory/{conversationId}") // 记忆清空接口。
-    public AiChatResponse clearMemory(@PathVariable String conversationId) {
-        return dialogueService.clearMemory(conversationId); // 委托 Service 删除该会话记忆。
-    }
-
-    private Long currentUserIdOrNull(String authorization) {
-        if (authorization == null || authorization.isBlank()) {
-            return null;
+    public AiChatResponse clearMemory(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                      @PathVariable String conversationId) {
+        var identity = identities.requireIdentity(authorization);
+        try (var tenant = identity.bindTenant()) {
+            return dialogueService.clearMemory(identity.conversationKey(conversationId));
         }
-        return authService.currentUser(authorization).getId();
     }
 
     private AiWechatUserEntity currentUser(String authorization) {

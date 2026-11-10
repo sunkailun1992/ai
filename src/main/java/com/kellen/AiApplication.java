@@ -19,8 +19,8 @@ import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
  * <p>ai 作为 fleet 成员与 user/message 同构：根包 {@code com.kellen} 全量组件扫描，
  * 复用 utils 的动态数据源、MyBatis 配置、统一响应/异常、公共工具等共享能力。
  * 数据源由 utils 动态数据源接管，因此排除 Spring 默认数据源自动配置；
- * 鉴权保留 ai 自有微信 Bearer 方案——不导入 security-auth.yaml、不启用 fleet JWT
- * （{@code security.auth.enabled} 默认 false，Security 链放行所有请求）。</p>
+ * 微信登录与 owner 接口保留自有 opaque Bearer 方案；scoped 聊天/记忆入口显式调用
+ * User RPC 验证 access JWT，不依赖全局 Security 链开关或用户/租户请求头。</p>
  */
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class}) // 数据源交给 utils 动态数据源，排除 Spring 默认数据源自动配置。
 @EnableDubbo // 开启 Dubbo 服务发布和引用扫描，RPC 共享配置由 Nacos dubbo.yaml 提供。

@@ -1,6 +1,7 @@
 package com.kellen.conversation;
 
 import com.kellen.agent.AiAgentClient;
+import com.kellen.auth.AiRequestIdentity;
 import com.kellen.audit.ChatAuditService;
 import com.kellen.file.MediaInput;
 import com.kellen.file.MediaInputValidator;
@@ -113,14 +114,20 @@ public class AiDialogueService {
      * @return Agent 逐段输出的 Flux。
      */
     public Flux<String> stream(AiChatRequest request, Long ownerUserId) {
+        return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
+    }
+
+    /** 已认证 User 身份作为不可变值进入异步链；微信 owner 不由 User ID 推定。 */
+    public Flux<String> stream(AiChatRequest request, Long ownerUserId, AiRequestIdentity identity) {
+        if (identity == null) return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
         Context entryParent = Context.current();
         return Flux.defer(() -> {
-            DialogueObservation observation = new DialogueObservation(entryParent);
+            DialogueObservation observation = new DialogueObservation(entryParent, identity);
             Flux<String> execution;
             // 整轮 span 在 RAG/记忆预取前建立，Scope 仅覆盖当前线程的装配与订阅。
-            try (Scope ignored = observation.span.makeCurrent()) {
+            try (Scope ignored = observation.span.makeCurrent(); var tenant = identity.bindTenant()) {
                 List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
-                String normalizedConversationId = memoryConversationId(request.conversationId());
+                String normalizedConversationId = identity.conversationKey(request.conversationId());
                 java.util.Optional<QuestionnaireChatResponse> questionnaire = questionnaireService.continueActiveIfPresent(
                         normalizedConversationId,
                         ownerUserId == null ? "" : String.valueOf(ownerUserId),
@@ -131,7 +138,7 @@ public class AiDialogueService {
                 } else {
                     chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
                     execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
-                            media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation);
+                            media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation, identity);
                 }
             } catch (RuntimeException error) {
                 observation.failed();
@@ -140,7 +147,9 @@ public class AiDialogueService {
             }
             Flux<String> source = execution;
             Flux<String> scoped = Flux.from(subscriber -> {
-                try (Scope ignored = observation.span.makeCurrent()) {
+                // 这里只订阅 HTTP 流，不做业务 SQL。避免新建 Reactor worker 继承 TTL 租户；
+                // 真正的预取及持久化动作分别在上面的装配 scope 和 observation.run 中显式绑定。
+                try (Scope ignored = observation.span.makeCurrent(); var tenant = AiRequestIdentity.suspendTenant()) {
                     source.subscribe(subscriber);
                 }
             });
@@ -174,7 +183,8 @@ public class AiDialogueService {
                                         String normalizedConversationId,
                                         String patientId,
                                         String sourceTenantId,
-                                        DialogueObservation observation) {
+                                        DialogueObservation observation,
+                                        AiRequestIdentity identity) {
         String message = requiredText(rawMessage, "message");
         String mediaSummary = mediaInputValidator.summarize(media);
         AiRolePromptService.ResolvedPrompt resolvedPrompt = aiRolePromptService.resolve(role, instruction);
@@ -197,10 +207,11 @@ public class AiDialogueService {
                         ragContext,
                         rawAttachments,
                         "ai",
-                        ownerUserId == null ? "" : ownerUserId.toString(),
-                        "100",
+                        identity.userId(),
+                        identity.tenantId(),
                         sourceTenantId,
-                        patientId)
+                        patientId,
+                        identity.accessToken())
                 .doOnNext(content::append)
                 .doOnComplete(() -> observation.run(() -> {
                     String assistantContent = content.toString();
@@ -252,10 +263,12 @@ public class AiDialogueService {
     private static final class DialogueObservation {
         private final io.opentelemetry.api.trace.Tracer tracer = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business");
         private final io.opentelemetry.api.trace.Span span;
+        private final AiRequestIdentity identity;
         private final java.util.concurrent.atomic.AtomicBoolean ended = new java.util.concurrent.atomic.AtomicBoolean();
         private volatile boolean failed;
 
-        private DialogueObservation(Context parent) {
+        private DialogueObservation(Context parent, AiRequestIdentity identity) {
+            this.identity = identity;
             span = tracer.spanBuilder("ai.dialogue.stream").setParent(parent).startSpan();
         }
 
@@ -267,7 +280,7 @@ public class AiDialogueService {
 
         private <T> T step(String name, java.util.function.Supplier<T> action) {
             var child = tracer.spanBuilder(name).startSpan();
-            try (Scope ignored = child.makeCurrent()) {
+            try (Scope ignored = child.makeCurrent(); var tenant = identity.bindTenant()) {
                 T result = action.get();
                 child.setAttribute("business.outcome", result instanceof String text && text.isBlank() ? "empty" : "success");
                 return result;
@@ -281,7 +294,7 @@ public class AiDialogueService {
         }
 
         private void run(Runnable action) {
-            try (Scope ignored = span.makeCurrent()) {
+            try (Scope ignored = span.makeCurrent(); var tenant = identity.bindTenant()) {
                 action.run();
             }
         }

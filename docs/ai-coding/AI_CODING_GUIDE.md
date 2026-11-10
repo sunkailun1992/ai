@@ -151,3 +151,9 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 涉及 Nacos AI Registry、Agent 接口、DDL、问卷状态机、文件 token 或会话归属时，必须执行相关测试或说明无法执行原因。
 
 个人 XXL-JOB 已退役，不再新增其依赖、配置类或 `xxl-job.yaml` 导入。调度选用 NAS 独立 Conductor OSS，通过 REST 接入；业务 Java 调度接口尚未实现，保持 Java 17，不为此引入要求 Java 21 的最新 SDK。
+
+## Scoped AI 身份边界
+
+聊天及记忆读取/清理要求 User access JWT，由 User `AuthSessionRpcService` 复核完整生命周期与账号租户授权。不能把 `X-User-*`、正文 `sourceTenantId` 或历史默认 `100` 当作授权身份。入口捕获的不可变 subject/tenant 在每个执行线程短暂绑定并恢复；终端 token 只作为 Authorization header 转发给验签后的 Agent，不能进入正文或日志。
+
+User JWT 与微信 opaque token 是不同身份空间，不可将同值 User ID 当微信 owner。User 聊天按 authTenant + subject + 客户端原始 conversationId 建内部摘要键；客户端双轮继续原 ID，不能从 `fleet_` 前缀信任任意内部键。微信登录/会话 owner 校验保持，未建立可信 User 映射前微信 opaque 不能使用 scoped 聊天；这种 fail-closed 是显式兼容变化，不宣称原微信聊天体验已验收。

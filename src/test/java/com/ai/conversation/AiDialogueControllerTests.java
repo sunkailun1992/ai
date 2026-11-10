@@ -50,15 +50,18 @@ class AiDialogueControllerTests {
         AiDialogueService dialogueService = mock(AiDialogueService.class); // Mock 业务服务，避免真实模型调用。
         WechatAuthService authService = mock(WechatAuthService.class); // Mock 登录服务，当前用例按未登录 Postman 场景测试。
         ChatConversationService conversationService = mock(ChatConversationService.class); // Mock 会话服务，当前用例不直接访问。
-        AiDialogueController controller = new AiDialogueController(dialogueService, authService, conversationService); // 直接构造 Controller，保持测试轻量。
+        var identities = mock(com.kellen.auth.AiRequestIdentityResolver.class);
+        var identity = new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token");
+        when(identities.requireIdentity("Bearer synthetic-token")).thenReturn(identity);
+        AiDialogueController controller = new AiDialogueController(dialogueService, authService, conversationService, identities);
         AiChatRequest request = new AiChatRequest("demo", "你好", null); // 构造纯文本流式请求。
 
-        when(dialogueService.stream(request, null)).thenReturn(Flux.just("你", "好")); // 指定流式返回片段。
+        when(dialogueService.stream(request, null, identity)).thenReturn(Flux.just("你", "好"));
 
-        String content = controller.chat(null, request).collectList().block().stream().reduce("", String::concat); // 收集片段验证透传。
+        String content = controller.chat("Bearer synthetic-token", request).collectList().block().stream().reduce("", String::concat);
 
         assertEquals("你好", content); // Controller 不改写流式内容。
-        verify(dialogueService).stream(request, null); // 确认委托给 Service 的统一流式入口。
+        verify(dialogueService).stream(request, null, identity);
     }
 
     /**

@@ -67,6 +67,7 @@ class AiDialogueTraceTest {
     void tearDown() {
         provider.close();
         GlobalOpenTelemetry.resetForTest();
+        com.kellen.utils.context.TenantContextHolder.clear();
     }
 
     private Span parent(String name) {
@@ -74,10 +75,11 @@ class AiDialogueTraceTest {
     }
 
     private Flux<String> assemble(Span parent, Flux<String> output) {
-        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(output);
         try (var ignored = parent.makeCurrent()) {
-            return service.stream(new AiChatRequest("fixture", "synthetic-question", null));
+            return service.stream(new AiChatRequest("fixture", "synthetic-question", null), null,
+                    new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token"));
         }
     }
 
@@ -88,6 +90,7 @@ class AiDialogueTraceTest {
     @Test
     void asyncTerminalPersistenceUsesTheDialogueContextAndRestoresTheWorker() {
         doAnswer(invocation -> {
+            assertEquals("tenant-a", com.kellen.utils.context.TenantContextHolder.getTenantId());
             var child = GlobalOpenTelemetry.getTracer("test").spanBuilder("fixture.audit.write").startSpan();
             child.end();
             return null;
@@ -95,8 +98,10 @@ class AiDialogueTraceTest {
         var worker = reactor.core.scheduler.Schedulers.newSingle("dialogue-terminal-test");
         Span parent = parent("entry");
         try {
+            com.kellen.utils.context.TenantContextHolder.setTenantId("attacker-header");
             assertEquals(List.of("synthetic-output"), assemble(parent, Flux.just("synthetic-output").publishOn(worker))
                     .collectList().block());
+            assertEquals("attacker-header", com.kellen.utils.context.TenantContextHolder.getTenantId());
             org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(2))
                     .untilAsserted(() -> assertEquals(1, businessSpans().size()));
             var auditSpan = exporter.getFinishedSpanItems().stream().filter(span -> span.getName().equals("fixture.audit.write"))
@@ -104,6 +109,8 @@ class AiDialogueTraceTest {
             assertEquals(businessSpans().get(0).getSpanId(), auditSpan.getParentSpanId());
             assertEquals(parent.getSpanContext().getTraceId(), auditSpan.getTraceId());
             assertFalse(reactor.core.publisher.Mono.fromCallable(() -> Span.current().getSpanContext().isValid())
+                    .subscribeOn(worker).block());
+            assertFalse(reactor.core.publisher.Mono.fromCallable(com.kellen.utils.context.TenantContextHolder::hasTenantId)
                     .subscribeOn(worker).block());
         } finally {
             worker.dispose();
@@ -114,6 +121,7 @@ class AiDialogueTraceTest {
     @Test
     void wholeDialogueSpanIncludesTheActualRagPrefetch() {
         when(rag.retrieveContext(any(), any())).thenAnswer(invocation -> {
+            assertEquals("tenant-a", com.kellen.utils.context.TenantContextHolder.getTenantId());
             var child = GlobalOpenTelemetry.getTracer("test").spanBuilder("fixture.rag.rpc").startSpan();
             child.end();
             return "";
@@ -197,5 +205,33 @@ class AiDialogueTraceTest {
         subscription.dispose();
         assertEquals(1, businessSpans().size());
         assertParent(businessSpans().get(0), a, "cancelled");
+        assertFalse(com.kellen.utils.context.TenantContextHolder.hasTenantId());
+    }
+
+    @Test void actualDialogueKeepsSourcePartitionSeparateAndUsesVerifiedIdentityAcrossWorkerReuse() throws Exception {
+        var worker = Executors.newSingleThreadExecutor();
+        try {
+            for (String tenant : List.of("tenant-a", "tenant-b")) {
+                var identity = new com.kellen.auth.AiRequestIdentity("verified-user", tenant, "synthetic-token");
+                var request = new AiChatRequest("client-session", null, "patient", "source-other", "synthetic-question", null, null, List.of(), List.of());
+                doAnswer(call -> {
+                    assertEquals(tenant, com.kellen.utils.context.TenantContextHolder.getTenantId());
+                    return "";
+                }).when(rag).retrieveContext(any(), any());
+                doAnswer(call -> {
+                            assertEquals("verified-user", call.getArgument(9)); assertEquals(tenant, call.getArgument(10));
+                            assertEquals("source-other", call.getArgument(11)); assertEquals("synthetic-token", call.getArgument(13));
+                            assertEquals(identity.conversationKey("client-session"), call.getArgument(0));
+                            return Flux.just("synthetic-output");
+                        }).when(agent).patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                worker.submit(() -> {
+                    com.kellen.utils.context.TenantContextHolder.setTenantId("prior-worker");
+                    try {
+                        assertEquals(List.of("synthetic-output"), service.stream(request, null, identity).collectList().block());
+                        assertEquals("prior-worker", com.kellen.utils.context.TenantContextHolder.getTenantId());
+                    } finally { com.kellen.utils.context.TenantContextHolder.clear(); }
+                }).get(5, TimeUnit.SECONDS);
+            }
+        } finally { worker.shutdownNow(); }
     }
 }

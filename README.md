@@ -2,7 +2,7 @@
 
 `ai` 是 AI 患者分析助手的主业务服务，基于 Java 17、Spring Boot、Spring Cloud Alibaba、Nacos 3.x、MyBatis-Plus 和 Gradle Wrapper 构建。
 
-个人公共包固定为 `com:utils:1.6.2`，跨服务契约固定为 `com:rpc-api:1.0.7`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
+个人公共包固定为 `com:utils:1.6.2`，跨服务契约固定为 `com:rpc-api:1.0.8`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
 
 本服务只负责入口编排、微信小程序用户、会话、文件 token、问卷状态机、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
 
@@ -187,6 +187,14 @@ Admin/Zipkin 模板与三 profile 的 imports 已退役。服务 JVM 的可选 O
 
 ## PostgreSQL 启动修复补丁
 
-当前服务补丁版本为 `1.6.2`，公共依赖精确固定 `com:utils:1.6.2`，接入 PostgreSQL/Druid 超时单位修复及事务化、失败即拒绝启动的 DDL 执行。原定连接 3 秒、读取 30 秒预算保持，RPC 契约 `com:rpc-api:1.0.7` 与轻量采集库 `com:fleet-observability:0.1.2` 保持。公共制品、Jar 构建、服务器与 IDEA 原生启动须分别验证，修改依赖不代表目标环境已恢复。
+当前服务补丁版本为 `1.6.3`，公共依赖精确固定 `com:utils:1.6.2`，接入 PostgreSQL/Druid 超时单位修复及事务化、失败即拒绝启动的 DDL 执行。原定连接 3 秒、读取 30 秒预算保持，RPC 契约 `com:rpc-api:1.0.8` 与轻量采集库 `com:fleet-observability:0.1.2` 保持。公共制品、Jar 构建、服务器与 IDEA 原生启动须分别验证，修改依赖不代表目标环境已恢复。
 
 本次公共观测补丁通过 `com:utils:1.6.2` 精确传递 `com:fleet-observability:0.1.2`，修复 Servlet Security 在 ERROR 分派中再次拒绝导致终态缺失的问题；认证和错误响应保持。源码与测试通过后，目标进程和追踪/日志联结仍须单独读回验收。
+
+### AI 可信身份与会话隔离
+
+`/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 现在要求个人 User 中心签发的有效 access JWT。AI 通过 `com:rpc-api:1.0.8` 的 `AuthSessionRpcService` 验证签名、issuer、有效期、access 类型、jti、撤销状态、tokenVersion、启用账号及有效租户授权。匿名、伪造用户/租户头及微信 opaque token 不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。
+
+User subject 与微信 user ID 使用独立身份空间。User 聊天不冒充微信 owner；内部会话键为经过验证的租户、subject 和客户端原始 `conversationId` 的固定摘要。SSE 继续只返回文本，客户端每轮传同一个原始 ID，不能把内部键当作新的公开会话 ID；直接传 `fleet_...` 也会按当前身份重新隔离。原微信登录及 `/conversations` 的 owner 校验保持，微信聊天需要后续明确的 User 身份映射才能使用 scoped 能力，本次不虚构映射或沿用默认租户。
+
+本轮身份在入口捕获为不可变值，RAG 预取与异步审计回调只在当前执行线程绑定已验证租户并恢复旧状态；纯 HTTP 订阅阶段临时清空 ambient 租户，防止新 worker 继承伪造请求头。调用 Agent 时 token 只通过 Authorization header 转发，不能进入签名正文、DTO、日志或异常；Agent 独立复核后才使用其租户调用 Memory。源码测试、HTTP 测试与真实整链读回分别验收。

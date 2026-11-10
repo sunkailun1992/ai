@@ -93,6 +93,16 @@ public class AiAgentClient {
                                               String tenantId,
                                               String sourceTenantId,
                                               String patientId) {
+        return patientAnalysisStream(conversationId, provider, systemPrompt, message, instruction,
+                historyContext, ragContext, attachments, caller, userId, tenantId, sourceTenantId, patientId, null);
+    }
+
+    /** 转发已经认证的终端 token；只放 Authorization，签名正文仍绑定本轮用户和租户。 */
+    public Flux<String> patientAnalysisStream(String conversationId, String provider, String systemPrompt,
+                                              String message, String instruction, String historyContext,
+                                              String ragContext, List<MediaInput> attachments, String caller,
+                                              String userId, String tenantId, String sourceTenantId, String patientId,
+                                              String accessToken) {
         AgentChatRequest request = new AgentChatRequest(
                 text(conversationId),
                 effectiveProvider(provider),
@@ -112,9 +122,11 @@ public class AiAgentClient {
         String url = endpointUrl(AiAgentRegistryClient.AgentOperation.PATIENT_ANALYSIS,
                 "/api/agents/patient-analysis/stream");
         log.debug("通过 Nacos AI Agent Registry 调用患者分析 Agent");
-        return Flux.defer(() -> requestSigner.post(webClient, url, request)
-                .retrieve()
-                .bodyToFlux(String.class));
+        return Flux.defer(() -> {
+            var outgoing = requestSigner.post(webClient, url, request);
+            if (StringUtils.hasText(accessToken)) outgoing.headers(headers -> headers.setBearerAuth(accessToken));
+            return outgoing.retrieve().bodyToFlux(String.class);
+        });
     }
 
     /**
