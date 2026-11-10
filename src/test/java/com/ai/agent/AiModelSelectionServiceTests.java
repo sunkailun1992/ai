@@ -1,6 +1,7 @@
 package com.ai.agent;
 
 import com.kellen.agent.AiModelSelectionEntity;
+import com.kellen.auth.AiRequestIdentityResolver;
 import com.kellen.agent.AiModelSelectionRepository;
 import com.kellen.agent.AiModelSelectionService;
 import com.kellen.config.AiAgentClientProperties;
@@ -12,7 +13,6 @@ import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -20,30 +20,15 @@ import static org.mockito.Mockito.when;
 class AiModelSelectionServiceTests {
 
     @Test
-    void shouldPersistAndReturnSelectedProvider() {
+    void shouldPersistInitialConfiguredProvider() {
         AiModelSelectionRepository repository = mock(AiModelSelectionRepository.class);
         when(repository.findByConfigKey("default-agent-provider")).thenReturn(Optional.empty());
         when(repository.save(any(AiModelSelectionEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         AiModelSelectionService service = new AiModelSelectionService(
-                new AiAgentClientProperties(Duration.ofSeconds(8), "google"), repository);
+                new AiAgentClientProperties(Duration.ofSeconds(8), "qwen"), repository, mock(AiRequestIdentityResolver.class));
         service.initialize();
 
-        String provider = service.updateDefaultProvider("qwen");
-
-        assertEquals("qwen", provider);
         assertEquals("qwen", service.currentProvider());
-    }
-
-    @Test
-    void shouldRejectUnsupportedProvider() {
-        AiModelSelectionRepository repository = mock(AiModelSelectionRepository.class);
-        when(repository.findByConfigKey("default-agent-provider")).thenReturn(Optional.empty());
-        when(repository.save(any(AiModelSelectionEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        AiModelSelectionService service = new AiModelSelectionService(
-                new AiAgentClientProperties(Duration.ofSeconds(8), "google"), repository);
-        service.initialize();
-
-        assertThrows(IllegalArgumentException.class, () -> service.updateDefaultProvider("other"));
     }
 
     @Test
@@ -55,7 +40,7 @@ class AiModelSelectionServiceTests {
                 new SQLSyntaxErrorException("Table 'ai.ai_model_selection' doesn't exist")
         ));
         AiModelSelectionService service = new AiModelSelectionService(
-                new AiAgentClientProperties(Duration.ofSeconds(8), "deepseek"), repository);
+                new AiAgentClientProperties(Duration.ofSeconds(8), "deepseek"), repository, mock(AiRequestIdentityResolver.class));
 
         service.initialize();
 

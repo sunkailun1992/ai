@@ -1,6 +1,11 @@
 package com.kellen.agent;
 
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.server.ResponseStatusException;
+import com.kellen.conversation.AiChatResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,12 +49,20 @@ public class AiModelSelectionController {
      * 切换当前默认 Provider。
      *
      * @param request 更新请求。
+     * @param authorization 已验证用户的 Bearer JWT。
      * @return 更新后的默认模型信息。
      */
     @PutMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public AiModelSelectionResponse update(@RequestBody AiModelSelectionUpdateRequest request) {
-        String provider = modelSelectionService.updateDefaultProvider(request.provider());
+    public AiModelSelectionResponse update(@RequestBody AiModelSelectionUpdateRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String provider = modelSelectionService.updateDefaultProvider(request.provider(), authorization);
         return response(provider);
+    }
+
+    /** 保留本入口的身份拒绝状态，不让全局未知异常处理器把 401/403 转成 500。 */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<AiChatResponse> identityRejected(ResponseStatusException rejected) {
+        return ResponseEntity.status(rejected.getStatusCode()).body(AiChatResponse.error("AI model selection access rejected"));
     }
 
     private AiModelSelectionResponse response(String provider) {

@@ -173,7 +173,7 @@ Admin/Zipkin 模板与三 profile 的 imports 已退役。服务 JVM 的可选 O
 
 ## PostgreSQL 启动修复补丁
 
-当前服务补丁版本为 `1.6.4`，公共依赖精确固定 `com:utils:1.6.2`，接入 PostgreSQL/Druid 超时单位修复及事务化、失败即拒绝启动的 DDL 执行。原定连接 3 秒、读取 30 秒预算保持，RPC 契约 `com:rpc-api:1.0.8` 与轻量采集库 `com:fleet-observability:0.1.2` 保持。公共制品、Jar 构建、服务器与 IDEA 原生启动须分别验证，修改依赖不代表目标环境已恢复。
+PostgreSQL 启动修复补丁版本为 `1.6.4`，公共依赖精确固定 `com:utils:1.6.2`，接入 PostgreSQL/Druid 超时单位修复及事务化、失败即拒绝启动的 DDL 执行。原定连接 3 秒、读取 30 秒预算保持，RPC 契约 `com:rpc-api:1.0.8` 与轻量采集库 `com:fleet-observability:0.1.2` 保持。公共制品、Jar 构建、服务器与 IDEA 原生启动须分别验证，修改依赖不代表目标环境已恢复。
 
 本次公共观测补丁通过 `com:utils:1.6.2` 精确传递 `com:fleet-observability:0.1.2`，修复 Servlet Security 在 ERROR 分派中再次拒绝导致终态缺失的问题；认证和错误响应保持。源码与测试通过后，目标进程和追踪/日志联结仍须单独读回验收。
 
@@ -192,3 +192,10 @@ User subject 与微信 user ID 使用独立身份空间。User 聊天不冒充�
 合法 SSE 在 EOF 前必须至少提供一个解码后长度大于零的 data 片段；空响应、空 data，以及只有心跳注释或 id/event 元数据的 EOF 以 `AI_AGENT_STREAM_EMPTY` 失败，不能触发成功指标或成功审计。仅跳过空字符串，不 trim，空格等有效文本片段保留原顺序。取消仍直接向上游传播并关闭连接，不以空流错误覆盖取消。回环 HTTP 合同覆盖合法 SSE、异常协议、HTTP 错误和实际连接关闭；本机测试通过不代替真实七服务整链验收。
 
 接口失败事件与配套升级见 [typed SSE 合同](docs/typed-sse-contract.md)。功能退役范围和数据清理边界见 [退役说明](docs/feature-retirement.md)。
+
+
+### 全局默认模型写入权限（1.6.6）
+
+`PUT /api/ai/model-selection` 修改的是全局 `default-agent-provider` 数据库配置，只允许同时拥有 `PLATFORM_SUPER_ADMIN` 身份和 `user:auth:manage` 权限的活跃 User access JWT。每次写入先调用认证中心验证令牌生命周期，再校验同一签名 JWT 的用户、租户与 RPC 身份一致；客户端请求头、普通登录、租户管理员、角色名称或字符串形式的权限不能替代该校验。撤销令牌、RPC 不可用或身份不一致均拒绝写入；合法身份缺少平台管理条件返回 403。GET 查询与启动时加载默认值保持既有行为。
+
+`AiModelSelectionAuthorizationHttpTest` 使用真实 HTTP、安全过滤器、全局异常处理器和 MyBatis-Plus/H2 Repository，验证拒绝请求不会改变全局值、更新时间或行数，且实际平台管理员可以保存当前供应商。User RPC 和 Agent 模型信息只在进程边界使用合成替身，不调用真实模型。该回归不能替代部署后的活跃令牌、实际权限与数据库读回验收；不需要更改 Nacos、RPC DTO 或共享安全开关。
