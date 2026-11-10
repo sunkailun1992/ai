@@ -24,7 +24,7 @@
 - 项目类型：患者分析与多模态报告解读后端
 - 技术栈：Java 17、Spring Boot 4、Spring AI、Spring Cloud Alibaba、Nacos、Dubbo、MyBatis-Plus、PostgreSQL、Gradle Wrapper、`com:rpc-api`、`com:utils`
 - 外部模型：Google Gemini、DeepSeek/OpenAI-compatible、通义千问 DashScope/OpenAI-compatible（由 `ai-agent` 执行层配置）
-- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.6.2`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
+- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.6.3`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
 - 核心风险：模型 Provider 选错、医疗 Prompt 污染、外部媒体 URL SSRF、重新引入 AI 对话文件流入口、密钥泄露、患者资料越权、会话历史越权、日志输出用户隐私
 
 ## 修改前阅读顺序
@@ -70,7 +70,8 @@
 - 新增模型 Provider、记忆策略、多模态校验、审计或响应结构时，必须优先沿用 `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md` 中的 Provider、Application Service、Strategy、Adapter、Validator、Repository 等既有模式。
 - 新增本服务对外 Controller、服务前缀，或新增后续独立 Agent 服务需要经网关访问时，必须同步评估 `../gateway` 的 Nacos `gateway-spring.yaml`；需要 Swagger UI 聚合的服务要先保证对应网关文档路径返回 200，再加入 `springdoc.swagger-ui.urls`。
 - 跨服务 Dubbo RPC 接口和 DTO 统一维护在同级 `../rpc-api`；`ai` 只实现或调用契约，不在本服务或 `utils` 复制接口定义。
-- `application.yml` 只保留本地兜底配置；真实模型密钥、数据库密码和 OSS 密钥必须放在 Nacos。Nacos 模板只能提交占位符。
+- 配置归属按业务控制面与基础设施区分：模型部署、上游密钥、虚拟密钥与额度以 LiteLLM 原生管理台为唯一源；AI 管理入口仅展示真实只读目录，不执行推理探针。存储 provider/凭据/默认/文件策略以 AI DB 与管理 API 为唯一源，凭据使用 AES-GCM 加密，独立 KEK 仅从私有 OS 环境读取；不再导入 `storage.yaml`，不回退旧 Nacos 存储凭据。DB/MQ/注册中心等基础运行配置继续由 Nacos 管理，模板只提交占位符。
+- 存储控制面读写统一要求活跃的 `PLATFORM_SUPER_ADMIN` 且具有 `user:auth:manage`。连接位置创建后不可变，凭据仅显式 KEEP/REPLACE；默认/历史 null 平台映射必须稳定，禁用上传不关闭历史读取，引用/default 配置禁删。任何外部探针先保存 requestId 意图，未知结果只读查回，不自动重放。
 - 全部 Java 微服务统一保留 Spring Boot 4 依赖线；AI 项目使用 Spring AI 2 正式版，不能再回退到旧版 Spring Boot 或 Spring AI 预发布版本。
 - 本项目不得引入交易、K线、下单、账户、行情、Discord、Apple 订阅等量化业务能力。
 

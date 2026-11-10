@@ -48,7 +48,8 @@ public class PostgresqlDdl implements IDdl {
     public List<String> getSqlFiles() {
         return List.of(
                 "db/postgresql/common-infra-schema.sql",
-                "db/postgresql/ai-schema.sql"
+                "db/postgresql/ai-schema.sql",
+                "db/postgresql/ai-storage-console-20261111.sql"
         );
     }
 }

@@ -71,5 +71,3 @@ spring:
       - "optional:nacos:dubbo.yaml?refreshEnabled=true"
       # a2a.yaml：Nacos AI Registry / A2A AgentCard 公共入口配置。
       - "optional:nacos:a2a.yaml?refreshEnabled=true"
-      # storage.yaml：X File Storage 统一存储配置，仅个人 MinIO 平台。
-      - "nacos:storage.yaml?refreshEnabled=true"

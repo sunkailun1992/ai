@@ -1,6 +1,8 @@
 package com.kellen.file;
 
 import com.kellen.auth.AiWechatUserEntity;
+import com.kellen.storageconfig.ManagedPrivateStorage;
+import com.kellen.storageconfig.StorageFailure;
 import com.kellen.config.AiProperties;
 
 import com.kellen.aliyun.oss.token.OssTokenProperties;
@@ -25,6 +27,7 @@ import java.net.URI;
 @Service // 注册为 Spring Service，供文件 Controller 调用。
 public class OssFileService {
 
+    private final ManagedPrivateStorage managed; // 生产只使用加密 DB registry。
     private final AiProperties properties; // OSS endpoint、bucket 和密钥配置。
     private final CommonAliyunProperties commonAliyunProperties; // 公共配置中心顶层 aliyun.* 兜底配置。
     private final PrivateObjectStorageService storage; // X File Storage 私有存储适配器。
@@ -43,9 +46,16 @@ public class OssFileService {
     }
 
     /** Spring 使用统一存储；保留旧构造入口供既有测试和独立调用方迁移。 */
-    @Autowired
     public OssFileService(AiProperties properties, CommonAliyunProperties commonAliyunProperties,
                           AiFileObjectRepository fileObjectRepository, PrivateObjectStorageService storage) {
+        this(properties,commonAliyunProperties,fileObjectRepository,storage,null);
+    }
+
+    @Autowired
+    public OssFileService(AiProperties properties, CommonAliyunProperties commonAliyunProperties,
+                          AiFileObjectRepository fileObjectRepository, PrivateObjectStorageService storage,
+                          ManagedPrivateStorage managed) {
+        this.managed = managed;
         this.storage = storage;
         this.properties = properties;
         this.commonAliyunProperties = commonAliyunProperties;
@@ -63,6 +73,11 @@ public class OssFileService {
      */
     public FileUploadPolicyResponse createUploadPolicy(AiWechatUserEntity user, String fileType, String mimeType, String fileName) {
         Long userId = requiredUserId(user);
+        if (managed != null) {
+            try (var upload = managed.upload()) {
+                return FileUploadPolicyResponse.ok(upload.policy(ownerScope(userId),fileType,mimeType,fileName),upload.platform());
+            }
+        }
         if (unifiedStorage()) {
             AiProperties.OssProperties limits = effectiveOssProperties();
             OssUploadPolicy policy = storage.createUploadPolicy(ownerScope(userId), fileType, mimeType, fileName,
@@ -83,6 +98,7 @@ public class OssFileService {
      */
     @Transactional // OSS 存在性检查通过后，元数据和展示 token 哈希必须原子写入。
     public CompletedFile completeUpload(AiWechatUserEntity user, FileUploadCompleteRequest request) {
+        if (managed != null) return completeManagedUpload(user,request);
         AiProperties.OssProperties limits = effectiveOssProperties();
         boolean unified = unifiedStorage();
         OssTokenProperties oss = unified ? null : requiredOssTokenProperties();
@@ -192,6 +208,7 @@ public class OssFileService {
      * @return 短时签名 URL。
      */
     public URI signedViewUri(AiFileObjectEntity entity) {
+        if (managed != null) return managed.signedViewUri(entity.getStoragePlatform(),entity.getObjectKey());
         if (StringUtils.hasText(entity.getStoragePlatform())) {
             if (storage == null) {
                 throw new IllegalStateException("文件存储平台未配置");
@@ -201,6 +218,28 @@ public class OssFileService {
         }
         // 迁移前的空平台记录始终沿用原 OSS，不能随着 default-platform 变化而读错对象。
         return OssTokenUtils.signedViewUri(entity.getObjectKey(), requiredOssTokenProperties());
+    }
+
+    private CompletedFile completeManagedUpload(AiWechatUserEntity user, FileUploadCompleteRequest request) {
+        Long userId=requiredUserId(user);
+        if(request==null)throw new IllegalArgumentException("请求体不能为空");
+        String key=requiredText(request.objectKey(),"objectKey");
+        try(var upload=managed.upload()) {
+            if(!upload.platform().equals(request.storagePlatform()))throw new StorageFailure("STORAGE_VERSION_CONFLICT",409);
+            upload.validateOwner(ownerScope(userId),key);
+            if(fileObjectRepository.existsByObjectKey(key))throw new IllegalArgumentException("文件已登记，请勿重复提交");
+            String originalName=OssTokenUtils.safeOriginalName(request.originalName(),key);
+            String mime=OssTokenUtils.normalizeMimeType(request.mimeType(),originalName);
+            String type=OssTokenUtils.normalizeFileType(request.fileType(),mime);
+            OssTokenUtils.validateFileTypeMatchesMime(type,mime);
+            long size=request.fileSize()==null?0:request.fileSize();
+            if(size<0 || size>upload.maxUploadBytes())throw new IllegalArgumentException("文件大小超过限制");
+            upload.verifyExists(key);
+            String token=OssTokenUtils.generateDisplayToken();
+            var entity=AiFileObjectEntity.create(userId,key,originalName,mime,type,size,OssTokenUtils.displayTokenHash(token));
+            entity.setStoragePlatform(upload.platform());
+            return new CompletedFile(fileObjectRepository.save(entity),token);
+        }
     }
 
     private boolean unifiedStorage() {

@@ -122,6 +122,23 @@ class OssFileServiceTests {
         verify(storage, never()).verifyObjectExists(anyString(), anyString());
     }
 
+    @Test
+    void productionConstructorNeverFallsBackToLegacyStorageWhenDatabaseIsEmpty() {
+        var managed=mock(com.kellen.storageconfig.ManagedPrivateStorage.class);
+        when(managed.upload()).thenThrow(new com.kellen.storageconfig.StorageFailure("STORAGE_UNCONFIGURED",503));
+        var legacy=mock(PrivateObjectStorageService.class);when(legacy.selected()).thenReturn(true);
+        var repository=mock(AiFileObjectRepository.class);
+        var service=new OssFileService(testProperties(),emptyCommonAliyunProperties(),repository,legacy,managed);
+        var user=AiWechatUserEntity.create("fixture-openid","");ReflectionTestUtils.setField(user,"id",7L);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->service.createUploadPolicy(user,"image","image/png","fixture.png"))
+                .isInstanceOf(com.kellen.storageconfig.StorageFailure.class);
+        verifyNoInteractions(repository);verify(legacy,never()).createUploadPolicy(anyString(),anyString(),anyString(),anyString(),anyString(),anyLong(),anyLong(),anyLong());
+        var file=AiFileObjectEntity.create(7L,"old/file.png","file.png","image/png","image",5L,"hash");
+        when(managed.signedViewUri(null,"old/file.png")).thenReturn(URI.create("https://files.example.invalid/owned"));
+        assertThat(service.signedViewUri(file)).isEqualTo(URI.create("https://files.example.invalid/owned"));
+        verify(legacy,never()).signedViewUri(anyString(),anyString(),anyLong());
+    }
+
     private static AiProperties testProperties() {
         return new AiProperties(
                 new AiProperties.DialogueProperties("patient-analysis", "兜底患者分析提示词", 4, 20971520, List.of("http", "https"),
