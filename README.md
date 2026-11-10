@@ -187,7 +187,7 @@ Admin/Zipkin 模板与三 profile 的 imports 已退役。服务 JVM 的可选 O
 
 ## PostgreSQL 启动修复补丁
 
-当前服务补丁版本为 `1.6.3`，公共依赖精确固定 `com:utils:1.6.2`，接入 PostgreSQL/Druid 超时单位修复及事务化、失败即拒绝启动的 DDL 执行。原定连接 3 秒、读取 30 秒预算保持，RPC 契约 `com:rpc-api:1.0.8` 与轻量采集库 `com:fleet-observability:0.1.2` 保持。公共制品、Jar 构建、服务器与 IDEA 原生启动须分别验证，修改依赖不代表目标环境已恢复。
+当前服务补丁版本为 `1.6.4`，公共依赖精确固定 `com:utils:1.6.2`，接入 PostgreSQL/Druid 超时单位修复及事务化、失败即拒绝启动的 DDL 执行。原定连接 3 秒、读取 30 秒预算保持，RPC 契约 `com:rpc-api:1.0.8` 与轻量采集库 `com:fleet-observability:0.1.2` 保持。公共制品、Jar 构建、服务器与 IDEA 原生启动须分别验证，修改依赖不代表目标环境已恢复。
 
 本次公共观测补丁通过 `com:utils:1.6.2` 精确传递 `com:fleet-observability:0.1.2`，修复 Servlet Security 在 ERROR 分派中再次拒绝导致终态缺失的问题；认证和错误响应保持。源码与测试通过后，目标进程和追踪/日志联结仍须单独读回验收。
 
@@ -198,3 +198,9 @@ Admin/Zipkin 模板与三 profile 的 imports 已退役。服务 JVM 的可选 O
 User subject 与微信 user ID 使用独立身份空间。User 聊天不冒充微信 owner；内部会话键为经过验证的租户、subject 和客户端原始 `conversationId` 的固定摘要。SSE 继续只返回文本，客户端每轮传同一个原始 ID，不能把内部键当作新的公开会话 ID；直接传 `fleet_...` 也会按当前身份重新隔离。原微信登录及 `/conversations` 的 owner 校验保持，微信聊天需要后续明确的 User 身份映射才能使用 scoped 能力，本次不虚构映射或沿用默认租户。
 
 本轮身份在入口捕获为不可变值，RAG 预取与异步审计回调只在当前执行线程绑定已验证租户并恢复旧状态；纯 HTTP 订阅阶段临时清空 ambient 租户，防止新 worker 继承伪造请求头。调用 Agent 时 token 只通过 Authorization header 转发，不能进入签名正文、DTO、日志或异常；Agent 独立复核后才使用其租户调用 Memory。源码测试、HTTP 测试与真实整链读回分别验收。
+
+### Agent 流式响应协议
+
+患者分析请求显式发送 `Accept: text/event-stream`。Agent 响应必须为 HTTP 2xx 并声明 `text/event-stream`（允许 charset 等参数），不能将 JSON、普通文本、缺失或非法 Content-Type 当作模型输出。协议失败仅使用固定 `AI_AGENT_STREAM_PROTOCOL_INVALID`，不把上游正文或响应头带入异常。HTTP 4xx/5xx 保留原有 `WebClientResponseException` 状态处理；其他非 2xx 均拒绝，重定向即使带合法 SSE 也不接受，不自动跟随或重试。
+
+合法 SSE 在 EOF 前必须至少提供一个解码后长度大于零的 data 片段；空响应、空 data，以及只有心跳注释或 id/event 元数据的 EOF 以 `AI_AGENT_STREAM_EMPTY` 失败，不能触发成功指标或成功审计。仅跳过空字符串，不 trim，空格等有效文本片段保留原顺序。取消仍直接向上游传播并关闭连接，不以空流错误覆盖取消。回环 HTTP 合同覆盖合法 SSE、异常协议、HTTP 错误和实际连接关闭；本机测试通过不代替真实七服务整链验收。

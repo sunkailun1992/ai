@@ -8,6 +8,7 @@ import com.kellen.questionnaire.QuestionnaireDefinition;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -125,7 +126,28 @@ public class AiAgentClient {
         return Flux.defer(() -> {
             var outgoing = requestSigner.post(webClient, url, request);
             if (StringUtils.hasText(accessToken)) outgoing.headers(headers -> headers.setBearerAuth(accessToken));
-            return outgoing.retrieve().bodyToFlux(String.class);
+            return outgoing.accept(MediaType.TEXT_EVENT_STREAM).exchangeToFlux(response -> {
+                if (response.statusCode().isError()) {
+                    return response.createException().flatMapMany(Flux::error);
+                }
+                if (!response.statusCode().is2xxSuccessful()) {
+                    return Flux.error(new IllegalStateException("AI_AGENT_STREAM_PROTOCOL_INVALID"));
+                }
+                final MediaType contentType;
+                try {
+                    contentType = response.headers().contentType().orElse(null);
+                } catch (IllegalArgumentException error) {
+                    return Flux.error(new IllegalStateException("AI_AGENT_STREAM_PROTOCOL_INVALID"));
+                }
+                if (contentType == null || !"text".equalsIgnoreCase(contentType.getType())
+                        || !"event-stream".equalsIgnoreCase(contentType.getSubtype())) {
+                    return Flux.error(new IllegalStateException("AI_AGENT_STREAM_PROTOCOL_INVALID"));
+                }
+                // HTTP 200 本身不是输出成功；空 EOF 不能触发上层成功审计。取消不会走此分支。
+                return response.bodyToFlux(String.class)
+                        .filter(chunk -> !chunk.isEmpty())
+                        .switchIfEmpty(Flux.error(new IllegalStateException("AI_AGENT_STREAM_EMPTY")));
+            });
         });
     }
 

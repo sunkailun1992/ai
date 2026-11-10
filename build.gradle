@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.kellen"                               // 发布坐标的 group，与 Java 包名保持一致。
-version = '1.6.3'                                  // 应用版本号；部署包名称由 bootJar 独立配置。
+version = '1.6.4'                                  // 应用版本号；部署包名称由 bootJar 独立配置。
 
 def privateMavenUrl = providers.gradleProperty("privateMavenUrl")
         .orElse(providers.environmentVariable("PRIVATE_MAVEN_URL"))
