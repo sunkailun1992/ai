@@ -51,7 +51,6 @@ docs/ai-coding/
 - 模型执行通过 Nacos AI Registry 发现 `ai-agent` 或后续独立 Agent 服务。
 - 主调用链必须保持 `AiDialogueController -> AiDialogueService -> AiAgentClient -> ai-agent`。
 - 角色 Prompt 通过 `AiRolePromptService` 和 `ai_role_prompt` 表维护。
-- 问卷模板、会话、答案和 outbox 属于业务库，不迁到 Nacos AI Registry。
 - AI 表设计按 `AI_CODING_GUIDE.md` 公共治理字段执行；`version` 只做乐观锁，业务版本使用 `prompt_version`、`template_version` 等明确列名。
 - 已有模型 Key、数据库连接和生产配置只能提示风险，不得由 AI 自动替换、删除或移动。
 - 分支命名、短分支生命周期、release/hotfix、tag 和分支清理按 `BRANCHING_SPEC.md` 处理。
@@ -59,3 +58,5 @@ docs/ai-coding/
 - 项目版本、公共包依赖和后端 Java 新项目基础坐标按 `VERSIONING_SPEC.md` 处理；纯 AI 规范或 README 改动不提升制品版本。
 - Dubbo RPC 契约统一维护在同级 `../rpc-api`；`ai` 通过契约调用或发布稳定能力，不在服务内复制接口/DTO。
 - 测试按 `TESTING_SPEC.md` 分层；核心接口用真实 Spring Boot HTTP 集成测试，核心 Service 用真实 Spring Bean 测试，模型/OSS 等外部依赖默认 stub。
+
+接口失败事件与配套升级见 [typed SSE 合同](docs/typed-sse-contract.md)。功能退役范围和数据清理边界见 [退役说明](docs/feature-retirement.md)。

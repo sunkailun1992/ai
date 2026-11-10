@@ -9,18 +9,16 @@ import java.util.List;
  * Nacos 配置中心和本地启动兜底中 {@code ai.*} 配置段的类型安全绑定。
  *
  * <p>主 {@code ai} 服务不再直接持有 Spring AI 模型供应商配置，也不再连接向量库执行
- * RAG。它只负责业务状态、审计、问卷状态机、文件令牌和会话记忆；真实模型执行由
+ * RAG。它只负责业务状态、审计、文件令牌和会话记忆；真实模型执行由
  * Nacos AI Registry 发现的 {@code ai-agent} 完成。</p>
  *
  * @param dialogue      对话业务配置段（默认角色、多模态限制、记忆窗口）。
- * @param questionnaire 对话式问卷配置段。
  * @param wechat        微信小程序登录配置段。
  * @param oss           私有 OSS 文件上传和令牌展示配置段。
  */
 @ConfigurationProperties(prefix = "ai")
 public record AiProperties(
         @DefaultValue DialogueProperties dialogue,
-        @DefaultValue QuestionnaireProperties questionnaire,
         @DefaultValue WechatProperties wechat,
         @DefaultValue OssProperties oss
 ) {
@@ -58,19 +56,6 @@ public record AiProperties(
     public record MemoryProperties(
             @DefaultValue("20") int maxMessages,
             @DefaultValue("7") int windowDays
-    ) {
-    }
-
-    /**
-     * 对话式问卷配置。
-     *
-     * <p>问卷链路由后端状态机管控，AI 只在当前题范围内做自然语言答案解释和追问建议。
-     * 该配置允许测试环境关闭远程 Agent 解析，避免单元测试依赖外部模型服务。</p>
-     *
-     * @param aiInterpreterEnabled 是否启用问卷 Agent 解释器。
-     */
-    public record QuestionnaireProperties(
-            @DefaultValue("true") boolean aiInterpreterEnabled
     ) {
     }
 

@@ -10,7 +10,7 @@
 
 - `ai` 是主 AI 入口服务，可以作为 RPC consumer 调用用户、消息或 Agent 能力，也可以按业务边界发布稳定 provider。
 - `ai` 调用 RAG 检索能力时只消费 `com.kellen.rpc.rag` 契约，通过 `rag` 服务 provider 获取上下文，不在本仓库复制接口或接入 provider 源码。
-- 主服务仍负责鉴权、会话、问卷状态、审计、文件 token 和持久化；不要把这些职责迁入 `rpc-api`。
+- 主服务仍负责鉴权、会话、审计、文件 token 和持久化；不要把这些职责迁入 `rpc-api`。
 - 不把模型 SDK、Prompt、会话实体或数据库模型暴露到 RPC 契约中。
 
 ## 依赖和 CI

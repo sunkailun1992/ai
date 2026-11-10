@@ -58,7 +58,7 @@ class AiDialogueControllerTests {
 
         when(dialogueService.stream(request, null, identity)).thenReturn(Flux.just("你", "好"));
 
-        String content = controller.chat("Bearer synthetic-token", request).collectList().block().stream().reduce("", String::concat);
+        String content = controller.chat("Bearer synthetic-token", request).map(org.springframework.http.codec.ServerSentEvent::data).collectList().block().stream().reduce("", String::concat);
 
         assertEquals("你好", content); // Controller 不改写流式内容。
         verify(dialogueService).stream(request, null, identity);

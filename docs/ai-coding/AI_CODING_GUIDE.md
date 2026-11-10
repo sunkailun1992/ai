@@ -8,7 +8,7 @@
 
 ## 1. 项目定位
 
-`ai` 是 AI 患者分析助手的主业务服务。它负责入口编排、微信小程序用户、会话、文件 token、问卷状态机、普通聊天记忆和调用审计。
+`ai` 是 AI 患者分析助手的主业务服务。它负责入口编排、微信小程序用户、会话、文件 token、普通聊天记忆和调用审计。
 
 真实模型执行属于 `ai-agent` 或后续独立 Agent 服务。主 `ai` 服务只通过 Nacos AI Registry 读取 AgentCard，再调用 Agent 暴露的 HTTP 接口；不得重新引入 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仅作为备用向量数据库连接配置保留，是否实际连接由明确业务入口和开关控制。
 
@@ -48,9 +48,7 @@
 - `ai.agent-registry.namespace`，必须引用 `${custom.namespace}` 或环境变量。
 - `ai.agent-registry.context-path`
 - `ai.agent-registry.patient-analysis-agent-name`
-- `ai.agent-registry.questionnaire-agent-name`
 - `ai.dialogue.*`
-- `ai.questionnaire.ai-interpreter-enabled`
 - `ai.wechat.*`
 - `ai.oss.*`
 
@@ -77,7 +75,7 @@
 
 关键服务职责：
 
-- `AiDialogueService`：问卷优先路由、角色 Prompt、记忆裁剪、Agent 调用、审计和历史展示。
+- `AiDialogueService`：角色 Prompt、记忆裁剪、Agent 调用、审计和历史展示。
 - `NacosAiAgentRegistryClient`：使用 Nacos 3.x 官方 AI SDK 读取 AgentCard。
 - `AiAgentClient`：按 AgentCard 接口地址调用 `ai-agent`。
 - `RagRetrievalClient`：通过 Dubbo RPC 调用独立 `rag` 服务获取检索上下文；无资料或调用失败时返回空上下文，不阻断 Agent 调用。
@@ -93,37 +91,27 @@
 - 主服务不得保留本地 `baseUrl` 或服务发现兜底绕过 Nacos AI Registry。
 - Nacos AI Registry 没有对应 AgentCard 或接口地址时，应显式失败。
 - 患者分析 Agent：`patient-analysis-agent`。
-- 问卷 Agent：`questionnaire-agent`。
 - Agent 接口协议当前使用 `HTTP+JSON`；患者分析接口开启流式传输。
 
 ## 6. 对话记忆规则
 
 - `ai_chat_memory` 只保存普通聊天 user / assistant 文本上下文。
 - 主服务在调用 Agent 前裁剪记忆窗口，并以文本上下文传给 Agent。
-- 问卷解释、问卷自然追问、候选 JSON、题目上下文不得写入普通聊天记忆。
 - `ai_chat_conversation` 是小程序会话元数据表。
 - `ai_chat_conversation_message` 是小程序历史展示表，可保存附件 JSON。
 - `ai_chat_message` 是审计表，不是模型记忆表。
 
-## 7. 问卷规则
-
-- 问卷模板、会话、答案、附件摘要和 outbox 属于业务库数据。
-- 问卷模板以 `ai_questionnaire_template` 为源，不迁到 Nacos AI Registry。
-- 问卷启动策略固定为 `RESUME_UNFINISHED`。
-- 问卷 Agent 只负责自然提问和答案解释，不直接写库、不推进状态、不推送外部系统。
-- `ai.questionnaire.ai-interpreter-enabled=false` 只用于测试或明确降级场景。
-
 ## 8. 数据库规则
 
-- 表结构和种子数据由 `PostgresqlDdl.java` 加载 `src/main/resources/db/ai-init.sql` 初始化。
-- 全新或清空后的业务库首次启动前，建议先在目标业务库手动执行 `db/ai-init.sql`；Seata AT 会在 `DataSource` 初始化时先检查 `undo_log`，不能依赖 MyBatis-Plus DDL 首次启动自动创建该表。
-- 新增表、字段、索引和种子数据统一同步到 `db/ai-init.sql`。
+- 当前表结构由 `PostgresqlDdl.java` 加载 `db/postgresql/common-infra-schema.sql` 与 `db/postgresql/ai-schema.sql`；历史 MySQL 脚本不在 PostgreSQL 执行。
+- 全新或清空后的业务库首次启动前，必须先在目标业务库手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行服务的 `db/postgresql/ai-schema.sql`；Seata AT 会在 `DataSource` 初始化时先检查 `undo_log`，不能依赖 MyBatis-Plus DDL 首次启动自动创建该表。
+- 当前 PostgreSQL 表结构变化使用增量脚本并同步 H2 测试结构；已发布的历史 MySQL 脚本不回改。
 - 测试环境使用 `src/test/resources/schema.sql`。
 - 数据库访问统一使用 MyBatis-Plus Repository。
 - 不拼接用户输入形成 SQL。
 - 新增字段必须同步 PostgreSQL DDL 注释和 H2 测试 schema。
 - 新增业务表默认补齐公共治理字段：`code`、`description`、`create_date_time`、`create_name`、`modify_date_time`、`modify_name`、`is_delete`、`type`、`state`、`label`、`sorting`、`version`、`tenant_id`。
-- 数据库列 `version` 只表示乐观锁版本号；Prompt、问卷模板、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
+- 数据库列 `version` 只表示乐观锁版本号；Prompt、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
 - 现有 AI 业务表保留 `bigint` 自增主键和 `created_at` / `updated_at` 运行时字段，后续新增通用后台管理型业务表再优先继承 `EntityBase`。
 
 ## 9. 安全规则
@@ -148,7 +136,7 @@ bash -n scripts/check-nacos-ai-config.sh
 NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 ```
 
-涉及 Nacos AI Registry、Agent 接口、DDL、问卷状态机、文件 token 或会话归属时，必须执行相关测试或说明无法执行原因。
+涉及 Nacos AI Registry、Agent 接口、DDL、文件 token 或会话归属时，必须执行相关测试或说明无法执行原因。
 
 个人 XXL-JOB 已退役，不再新增其依赖、配置类或 `xxl-job.yaml` 导入。调度选用 NAS 独立 Conductor OSS，通过 REST 接入；业务 Java 调度接口尚未实现，保持 Java 17，不为此引入要求 Java 21 的最新 SDK。
 

@@ -28,8 +28,7 @@ import java.util.UUID;
 public class AiAgentRequestSigner {
 
     private static final Set<String> POST_PATHS = Set.of(
-            "/api/agents/patient-analysis/stream", "/api/agents/questionnaire/reply",
-            "/api/agents/questionnaire/interpret");
+            "/api/agents/patient-analysis/stream");
     private static final Set<String> MODEL_QUERY_KEYS = Set.of("provider");
     private final AiAgentClientAuthProperties properties;
     private final JsonMapper jsonMapper;

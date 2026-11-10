@@ -126,7 +126,6 @@ class OssFileServiceTests {
         return new AiProperties(
                 new AiProperties.DialogueProperties("patient-analysis", "兜底患者分析提示词", 4, 20971520, List.of("http", "https"),
                         List.of("image/*", "text/plain"), new AiProperties.MemoryProperties(20, 7)),
-                new AiProperties.QuestionnaireProperties(false),
                 new AiProperties.WechatProperties("wx-test", "", 30),
                 new AiProperties.OssProperties("oss-cn-hangzhou.aliyuncs.com", "", "", "", "ai-miniapp", 60, 1800, 52428800));
     }

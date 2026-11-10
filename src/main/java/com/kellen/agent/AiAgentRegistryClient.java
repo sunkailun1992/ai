@@ -19,9 +19,7 @@ public interface AiAgentRegistryClient {
      * Agent 操作类型。
      */
     enum AgentOperation {
-        PATIENT_ANALYSIS,
-        QUESTIONNAIRE_REPLY,
-        QUESTIONNAIRE_INTERPRET
+        PATIENT_ANALYSIS
     }
 
     /**

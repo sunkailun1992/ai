@@ -136,8 +136,6 @@ public class NacosAiAgentRegistryClient implements AiAgentRegistryClient {
         String searchable = text == null ? "" : text.toLowerCase(Locale.ROOT);
         return switch (operation) {
             case PATIENT_ANALYSIS -> containsAny(searchable, "patient-analysis", "patient", "report-analysis", "report");
-            case QUESTIONNAIRE_REPLY -> containsAny(searchable, "questionnaire/reply", "reply", "conversational-questionnaire");
-            case QUESTIONNAIRE_INTERPRET -> containsAny(searchable, "questionnaire/interpret", "interpret", "answer-interpretation");
         };
     }
 
@@ -219,7 +217,6 @@ public class NacosAiAgentRegistryClient implements AiAgentRegistryClient {
     private String agentName(AgentOperation operation) {
         return switch (operation) {
             case PATIENT_ANALYSIS -> properties.patientAnalysisAgentName();
-            case QUESTIONNAIRE_REPLY, QUESTIONNAIRE_INTERPRET -> properties.questionnaireAgentName();
         };
     }
 

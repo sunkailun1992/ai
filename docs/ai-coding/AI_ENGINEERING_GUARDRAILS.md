@@ -10,7 +10,6 @@
 2. 主 `ai` 服务不得重新引入本地模型执行，模型执行只能委托给 Nacos AI Registry 发现的 Agent。
 3. AgentCard 缺失或接口地址缺失时必须显式失败，不能静默回退本地模型。
 4. 对话记忆必须通过 `DbChatMemoryService`，并保留条数上限和时间窗口限制。
-5. 问卷源数据必须和普通聊天记忆分离。
 6. 多模态附件 URL 默认不可信，必须做协议、数量、远程 Content-Type、MIME 和异常处理。
 7. 患者分析角色必须保留医疗安全边界，不能替代医生诊断、治疗、用药或急救判断。
 8. 角色 Prompt 必须通过 `ai_role_prompt` 表运营，不能把完整长 Prompt 固化到 YAML。
@@ -23,7 +22,6 @@
 | --- | --- | --- |
 | 低风险 | README、注释、接口示例、无行为变化的文档 | 检查 diff，确认无密钥和错误接口说明 |
 | 中风险 | DTO、普通 Controller、普通 Service、小范围配置、普通数据库查询 | 执行 `./gradlew test`，核对异常响应、配置、DTO 和数据库字段 |
-| 高风险 | Agent Registry、Agent 接口、Prompt、对话记忆结构、多模态 URL、流式响应、问卷 AI 答案解释 | 执行测试，检查 Registry、记忆窗口、SSRF、远程 Content-Type、超时、日志脱敏 |
 | 极高风险 | 密钥管理、生产配置、认证授权、重新引入文件流、工具调用、持久化聊天记录结构重建 | 先写方案和验收标准，再拆分实现、测试、回滚步骤 |
 
 ## 3. Definition of Done
@@ -46,7 +44,6 @@
 | Agent Registry | Agent 名称、接口 URL、协议、流式开关、技能和租户是否与 Nacos AI 注册中心一致 |
 | 对话记忆 | 会话 ID、记忆条数和时间窗口、清空接口影响范围、记忆表与审计表区分 |
 | 多模态 | URL 协议、媒体数量、远程 Content-Type、MIME 类型、错误响应、SSRF 边界 |
-| 对话式问卷 | `RESUME_UNFINISHED`、Agent 答案解释、Agent 自然提问、问卷记忆作用域、题目级附件归属、结构化答案落库、禁止 Agent 直接写库 |
 | 流式响应 | SSE 类型、异常路径、客户端断开后的服务端行为、完成后是否落库 |
 | 数据库 | Entity 字段、Repository 查询、DDL 初始化、H2 测试覆盖、是否引入无关表 |
 | 配置 | 环境变量、默认值、Nacos Data ID、数据库地址、密钥占位符 |

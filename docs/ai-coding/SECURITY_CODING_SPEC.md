@@ -21,7 +21,6 @@
 ## Prompt 和 AI 输出安全
 
 - 完整角色 Prompt 存在 `ai_role_prompt`，不能把可运营长 Prompt 固化到 YAML。
-- Nacos AI Registry 不保存问卷模板、问卷答案或聊天记忆。
 - 患者分析助手必须明确：输出只用于健康信息理解和就医沟通准备，不能替代医生诊断、治疗、用药或急救判断。
 - 用户传入的 `instruction` 只能作为本轮补充要求，不能覆盖医疗安全边界或角色边界。
 - 模型输出只能作为文本结果保存和返回，不能直接拼 SQL、URL、文件路径、命令或危险操作。
@@ -31,7 +30,7 @@
 - 多模态媒体 URL 默认不可信，必须校验协议白名单、数量、MIME 和远程 Content-Type。
 - 当前默认只允许 `http` / `https`。
 - 不允许支持 `file`、`classpath`、`ftp`、`jar` 等本地或非预期协议。
-- 文件、图片、PDF、JSON 问卷等资料必须先上传到业务文件服务或 OSS，再把可访问 URL 传入 `attachments`。
+- 文件、图片、PDF、JSON 材料等资料必须先上传到业务文件服务或 OSS，再把可访问 URL 传入 `attachments`。
 - AI 对话接口不得重新暴露 `multipart/form-data` 文件流入口。
 
 ## 数据库和查询安全
@@ -39,7 +38,6 @@
 - 数据库访问统一使用 MyBatis-Plus Repository，不拼接用户输入形成 SQL。
 - `ai_chat_message` 只保存审计。
 - `ai_chat_memory` 只保存普通聊天上下文。
-- `ai_questionnaire_*` 保存问卷源数据和状态。
 - `ai_role_prompt` 保存可运营角色 Prompt。
 - 主服务不再使用 `system_parameter.ai_provider` 做模型切换。
 - 真实数据库密码、模型 Key、OSS 密钥必须在 Nacos 配置中心或环境变量维护。

@@ -10,8 +10,6 @@ import com.kellen.memory.DbChatMemoryService;
 import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
-import com.kellen.questionnaire.ConversationalQuestionnaireService;
-import com.kellen.questionnaire.QuestionnaireChatResponse;
 import com.kellen.rag.RagRetrievalClient;
 
 import io.opentelemetry.context.Context;
@@ -25,7 +23,7 @@ import java.util.List;
 /**
  * 患者分析 AI 对话编排服务。
  *
- * <p>主 {@code ai} 服务负责入口编排：鉴权后的会话归属、问卷优先路由、角色 Prompt
+ * <p>主 {@code ai} 服务负责入口编排：鉴权后的会话归属、角色 Prompt
  * 解析、记忆裁剪、附件安全校验、审计和历史展示。真实模型执行只通过 Nacos AI Registry
  * 发现的 {@code ai-agent} 完成，本服务不再持有 Spring AI 模型客户端。</p>
  */
@@ -41,7 +39,6 @@ public class AiDialogueService {
     private final AiRolePromptService aiRolePromptService;
     private final ChatConversationService chatConversationService;
     private final ChatConversationMessageService chatConversationMessageService;
-    private final ConversationalQuestionnaireService questionnaireService;
     private final PatientMemoryService patientMemoryService;
     private final AiModelCallObserver modelCallObserver;
     private final AiAgentClient aiAgentClient;
@@ -56,7 +53,6 @@ public class AiDialogueService {
      * @param aiRolePromptService            角色提示词解析服务。
      * @param chatConversationService        会话元数据服务。
      * @param chatConversationMessageService 展示消息服务。
-     * @param questionnaireService           问卷状态机服务。
      * @param patientMemoryService           患者长期记忆服务。
      * @param modelCallObserver              模型调用观测服务。
      * @param aiAgentClient                  Agent 执行服务客户端。
@@ -68,7 +64,6 @@ public class AiDialogueService {
                              AiRolePromptService aiRolePromptService,
                              ChatConversationService chatConversationService,
                              ChatConversationMessageService chatConversationMessageService,
-                             ConversationalQuestionnaireService questionnaireService,
                              PatientMemoryService patientMemoryService,
                              AiModelCallObserver modelCallObserver,
                              AiAgentClient aiAgentClient,
@@ -79,7 +74,6 @@ public class AiDialogueService {
         this.aiRolePromptService = aiRolePromptService;
         this.chatConversationService = chatConversationService;
         this.chatConversationMessageService = chatConversationMessageService;
-        this.questionnaireService = questionnaireService;
         this.patientMemoryService = patientMemoryService;
         this.modelCallObserver = modelCallObserver;
         this.aiAgentClient = aiAgentClient;
@@ -128,18 +122,9 @@ public class AiDialogueService {
             try (Scope ignored = observation.span.makeCurrent(); var tenant = identity.bindTenant()) {
                 List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
                 String normalizedConversationId = identity.conversationKey(request.conversationId());
-                java.util.Optional<QuestionnaireChatResponse> questionnaire = questionnaireService.continueActiveIfPresent(
-                        normalizedConversationId,
-                        ownerUserId == null ? "" : String.valueOf(ownerUserId),
-                        request.message(),
-                        request.effectiveAttachments());
-                if (questionnaire.isPresent()) {
-                    execution = Flux.just(questionnaire.get().reply());
-                } else {
-                    chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
-                    execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
-                            media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation, identity);
-                }
+                chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
+                execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
+                        media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation, identity);
             } catch (RuntimeException error) {
                 observation.failed();
                 observation.finish(reactor.core.publisher.SignalType.ON_ERROR);
@@ -154,7 +139,7 @@ public class AiDialogueService {
                 }
             });
             return scoped.doOnError(error -> observation.failed()).doFinally(observation::finish);
-        }).onErrorResume(IllegalArgumentException.class, exception -> Flux.just(safeClientErrorMessage(exception)));
+        });
     }
 
     /**
@@ -231,8 +216,7 @@ public class AiDialogueService {
                     modelCallObserver.cancelled(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
                     chatAuditService.recordFailure(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), "stream cancelled by client", mediaSummary);
-                }))
-                .onErrorResume(exception -> Flux.just(safeStreamErrorMessage(exception)));
+                }));
     }
 
     /**
@@ -325,18 +309,6 @@ public class AiDialogueService {
             return "患者长期记忆:\n" + longMemory;
         }
         return "患者长期记忆:\n" + longMemory + "\n\n会话短记忆:\n" + shortMemory;
-    }
-
-    private String safeStreamErrorMessage(Throwable exception) {
-        String message = rootMessage(exception);
-        if (message.contains("Nacos AI Registry")) {
-            return "\n[模型调用失败] AI Agent 注册中心未找到可用接口，请检查 Nacos AI 注册中心的 AgentCard 配置。";
-        }
-        return "\n[模型调用失败] 本轮 AI 响应生成失败，请检查附件类型、附件 URL、Nacos AI Registry 和 ai-agent 服务状态后重试。";
-    }
-
-    private String safeClientErrorMessage(IllegalArgumentException exception) {
-        return "\n[请求参数错误] " + exception.getMessage();
     }
 
     private String rootMessage(Throwable throwable) {

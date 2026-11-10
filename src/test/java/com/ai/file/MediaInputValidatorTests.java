@@ -119,11 +119,11 @@ class MediaInputValidatorTests {
     }
 
     /**
-     * 验证 JSON 远程附件会作为文本上下文处理，便于问卷表单参与分析。
+     * 验证 JSON 远程附件会作为文本上下文处理，便于结构化材料参与分析。
      */
     @Test
     void acceptsJsonUrlAsTextAttachment() throws IOException {
-        HttpServer server = contentTypeServer("application/json", "{\"form\":\"demo\"}"); // 模拟文件服务上的 JSON 问卷。
+        HttpServer server = contentTypeServer("application/json", "{\"form\":\"demo\"}"); // 模拟文件服务上的 JSON 材料。
         try {
             String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/form.json"; // 合法 JSON URL。
             List<MediaInputValidator.ValidatedMedia> validated = validator.validateUrlMedia(List.of(new MediaInput(url, "application/json"))); // 校验远程 JSON。
@@ -146,7 +146,6 @@ class MediaInputValidatorTests {
         return new AiProperties(
                 new AiProperties.DialogueProperties("patient-analysis", "测试提示词", maxMediaCount, 20971520, List.of("http", "https"),
                         List.of("image/*", "text/plain", "application/json"), new AiProperties.MemoryProperties(20, 7)),
-                new AiProperties.QuestionnaireProperties(false), // 问卷 AI 解释器不参与媒体校验测试。
                 new AiProperties.WechatProperties("wx-test", "", 30), // 微信登录不参与媒体校验测试。
                 new AiProperties.OssProperties("oss-cn-hangzhou.aliyuncs.com", "", "", "", "ai-miniapp", 60, 1800, 52428800)); // OSS 不参与媒体校验测试。
     }

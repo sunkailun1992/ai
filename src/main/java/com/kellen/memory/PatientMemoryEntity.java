@@ -26,7 +26,7 @@ public class PatientMemoryEntity extends AiGovernanceEntity {
 
     private String sourceTenantId; // 来源业务租户 ID。
 
-    private String memoryType; // 记忆类型，例如 questionnaire_summary/questionnaire_answer。
+    private String memoryType; // 记忆类型，例如报告摘要或患者事实。
 
     private String memoryKey; // 同一患者下稳定记忆键。
 
@@ -36,9 +36,9 @@ public class PatientMemoryEntity extends AiGovernanceEntity {
 
     private String factsJson; // 结构化事实 JSON。
 
-    private String sourceType; // 来源类型，例如 QUESTIONNAIRE_SESSION。
+    private String sourceType; // 来源类型，例如已授权的报告记录。
 
-    private String sourceId; // 来源业务 ID，例如问卷 sessionId。
+    private String sourceId; // 来源业务记录的稳定 ID。
 
     private Double confidence; // 置信度。
 

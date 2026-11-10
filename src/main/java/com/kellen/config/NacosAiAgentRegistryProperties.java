@@ -18,7 +18,6 @@ public record NacosAiAgentRegistryProperties(
         @DefaultValue("") String password,
         @DefaultValue("60") long cacheTtlSeconds,
         @DefaultValue("/nacos") String contextPath,
-        @DefaultValue("patient-analysis-agent") String patientAnalysisAgentName,
-        @DefaultValue("questionnaire-agent") String questionnaireAgentName
+        @DefaultValue("patient-analysis-agent") String patientAnalysisAgentName
 ) {
 }

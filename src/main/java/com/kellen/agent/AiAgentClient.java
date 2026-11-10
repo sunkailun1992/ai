@@ -2,13 +2,12 @@ package com.kellen.agent;
 
 import com.kellen.config.AiAgentClientProperties;
 import com.kellen.file.MediaInput;
-import com.kellen.questionnaire.QuestionDefinition;
-import com.kellen.questionnaire.QuestionnaireAnswerEntity;
-import com.kellen.questionnaire.QuestionnaireDefinition;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -126,7 +125,8 @@ public class AiAgentClient {
         return Flux.defer(() -> {
             var outgoing = requestSigner.post(webClient, url, request);
             if (StringUtils.hasText(accessToken)) outgoing.headers(headers -> headers.setBearerAuth(accessToken));
-            return outgoing.accept(MediaType.TEXT_EVENT_STREAM).exchangeToFlux(response -> {
+            return outgoing.header("X-AI-Stream-Protocol", "typed-sse-v1")
+                    .accept(MediaType.TEXT_EVENT_STREAM).exchangeToFlux(response -> {
                 if (response.statusCode().isError()) {
                     return response.createException().flatMapMany(Flux::error);
                 }
@@ -140,66 +140,25 @@ public class AiAgentClient {
                     return Flux.error(new IllegalStateException("AI_AGENT_STREAM_PROTOCOL_INVALID"));
                 }
                 if (contentType == null || !"text".equalsIgnoreCase(contentType.getType())
-                        || !"event-stream".equalsIgnoreCase(contentType.getSubtype())) {
+                        || !"event-stream".equalsIgnoreCase(contentType.getSubtype())
+                        || !List.of("typed-sse-v1").equals(response.headers().header("X-AI-Stream-Protocol"))) {
                     return Flux.error(new IllegalStateException("AI_AGENT_STREAM_PROTOCOL_INVALID"));
                 }
                 // HTTP 200 本身不是输出成功；空 EOF 不能触发上层成功审计。取消不会走此分支。
-                return response.bodyToFlux(String.class)
-                        .filter(chunk -> !chunk.isEmpty())
+                return response.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                        .<String>handle((event, sink) -> {
+                            if ("error".equals(event.event())) {
+                                sink.error(new AiAgentExecutionException());
+                            } else if (event.event() != null && !event.event().isEmpty()
+                                    && !"message".equals(event.event())) {
+                                sink.error(new IllegalStateException("AI_AGENT_STREAM_PROTOCOL_INVALID"));
+                            } else if (event.data() != null && !event.data().isEmpty()) {
+                                sink.next(event.data());
+                            }
+                        })
                         .switchIfEmpty(Flux.error(new IllegalStateException("AI_AGENT_STREAM_EMPTY")));
             });
         });
-    }
-
-    /**
-     * 调用问卷自然提问 Agent。
-     *
-     * @param definition      问卷定义。
-     * @param currentQuestion 当前题。
-     * @param previousAnswers 已采集答案。
-     * @param resumed         是否恢复未完成问卷。
-     * @return Agent 响应。
-     */
-    public QuestionnaireReplyResult questionnaireReply(QuestionnaireDefinition definition,
-                                                       QuestionDefinition currentQuestion,
-                                                       List<QuestionnaireAnswerEntity> previousAnswers,
-                                                       boolean resumed) {
-        QuestionnaireReplyRequest request = new QuestionnaireReplyRequest(
-                effectiveProvider(null),
-                definitionPayload(definition),
-                questionPayload(currentQuestion),
-                answerPayloads(previousAnswers),
-                resumed
-        );
-        return post(AiAgentRegistryClient.AgentOperation.QUESTIONNAIRE_REPLY,
-                "/api/agents/questionnaire/reply", request, QuestionnaireReplyResult.class);
-    }
-
-    /**
-     * 调用问卷答案解释 Agent。
-     *
-     * @param definition        问卷定义。
-     * @param currentQuestion   当前题。
-     * @param previousAnswers   已采集答案。
-     * @param rawMessage        用户原始回答。
-     * @param attachmentSummary 附件摘要。
-     * @return Agent 响应。
-     */
-    public QuestionnaireInterpretResult questionnaireInterpret(QuestionnaireDefinition definition,
-                                                               QuestionDefinition currentQuestion,
-                                                               List<QuestionnaireAnswerEntity> previousAnswers,
-                                                               String rawMessage,
-                                                               String attachmentSummary) {
-        QuestionnaireInterpretRequest request = new QuestionnaireInterpretRequest(
-                effectiveProvider(null),
-                definitionPayload(definition),
-                questionPayload(currentQuestion),
-                answerPayloads(previousAnswers),
-                rawMessage,
-                attachmentSummary
-        );
-        return post(AiAgentRegistryClient.AgentOperation.QUESTIONNAIRE_INTERPRET,
-                "/api/agents/questionnaire/interpret", request, QuestionnaireInterpretResult.class);
     }
 
     /**
@@ -217,19 +176,6 @@ public class AiAgentClient {
         return requestSigner.get(webClient, url)
                 .retrieve()
                 .bodyToMono(AgentModelResult.class)
-                .timeout(properties.timeout())
-                .block();
-    }
-
-    private <T> T post(AiAgentRegistryClient.AgentOperation operation,
-                       String expectedPath,
-                       Object body,
-                       Class<T> responseType) {
-        String url = endpointUrl(operation, expectedPath);
-        log.debug("通过 Nacos AI Agent Registry 调用 Agent，operation={}", operation);
-        return requestSigner.post(webClient, url, body)
-                .retrieve()
-                .bodyToMono(responseType)
                 .timeout(properties.timeout())
                 .block();
     }
@@ -282,39 +228,6 @@ public class AiAgentClient {
                 .toUriString();
     }
 
-    private QuestionnaireDefinitionPayload definitionPayload(QuestionnaireDefinition definition) {
-        return new QuestionnaireDefinitionPayload(
-                text(definition.questionnaireCode()),
-                text(definition.version()),
-                text(definition.name()),
-                text(definition.scene())
-        );
-    }
-
-    private QuestionDefinitionPayload questionPayload(QuestionDefinition question) {
-        return new QuestionDefinitionPayload(
-                text(question.id()),
-                text(question.label()),
-                text(question.prompt()),
-                question.required(),
-                question.allowsAttachments()
-        );
-    }
-
-    private List<QuestionnaireAnswerPayload> answerPayloads(List<QuestionnaireAnswerEntity> previousAnswers) {
-        if (previousAnswers == null || previousAnswers.isEmpty()) {
-            return List.of();
-        }
-        return previousAnswers.stream()
-                .map(answer -> new QuestionnaireAnswerPayload(
-                        text(answer.getQuestionId()),
-                        text(answer.getSelectedText()),
-                        text(answer.getRawText()),
-                        text(answer.getAttachmentSummary())
-                ))
-                .toList();
-    }
-
     private String text(String value) {
         return value == null ? "" : value.trim();
     }
@@ -339,90 +252,6 @@ public class AiAgentClient {
             String tenantId,
             String sourceTenantId,
             String patientId
-    ) {
-    }
-
-    private record QuestionnaireReplyRequest(
-            String provider,
-            QuestionnaireDefinitionPayload definition,
-            QuestionDefinitionPayload currentQuestion,
-            List<QuestionnaireAnswerPayload> previousAnswers,
-            boolean resumed
-    ) {
-    }
-
-    private record QuestionnaireInterpretRequest(
-            String provider,
-            QuestionnaireDefinitionPayload definition,
-            QuestionDefinitionPayload currentQuestion,
-            List<QuestionnaireAnswerPayload> previousAnswers,
-            String rawMessage,
-            String attachmentSummary
-    ) {
-    }
-
-    private record QuestionnaireDefinitionPayload(
-            String questionnaireCode,
-            String version,
-            String name,
-            String scene
-    ) {
-    }
-
-    private record QuestionDefinitionPayload(
-            String id,
-            String label,
-            String prompt,
-            boolean required,
-            boolean allowsAttachments
-    ) {
-    }
-
-    private record QuestionnaireAnswerPayload(
-            String questionId,
-            String selectedText,
-            String rawText,
-            String attachmentSummary
-    ) {
-    }
-
-    /**
-     * 问卷自然提问 Agent 响应。
-     *
-     * @param provider Agent 实际使用的模型供应商。
-     * @param model    Agent 实际使用的模型名。
-     * @param reply    当前题自然提问文案。
-     */
-    public record QuestionnaireReplyResult(
-            String provider,
-            String model,
-            String reply
-    ) {
-    }
-
-    /**
-     * 问卷答案解释 Agent 响应。
-     *
-     * @param provider         Agent 实际使用的模型供应商。
-     * @param model            Agent 实际使用的模型名。
-     * @param rawText          用户原始输入。
-     * @param selectedCode     选项编码。
-     * @param selectedText     标准化答案文本。
-     * @param value            保留细节的答案值。
-     * @param confidence       置信度。
-     * @param needFollowUp     是否需要继续追问。
-     * @param followUpQuestion 追问文案。
-     */
-    public record QuestionnaireInterpretResult(
-            String provider,
-            String model,
-            String rawText,
-            String selectedCode,
-            String selectedText,
-            String value,
-            double confidence,
-            boolean needFollowUp,
-            String followUpQuestion
     ) {
     }
 

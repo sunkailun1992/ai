@@ -12,6 +12,6 @@ Agent 请求可通过 `ai.agent-client.auth.enabled/client-id/client-secret` 启
 
 验证：`./gradlew test --no-daemon`、`./gradlew bootJar --no-daemon`、`bash scripts/check-secrets.sh`。这些测试使用合成身份与本地 HTTP 桩，不表示真实 Nacos / user RPC / OSS / MinIO 已验收。
 
-个人空库初始化已移除历史医疗角色与问卷种子。Java/classpath 演示种子只有在显式设置 `ai.bootstrap.seed-demo-content=true` 时才导入，默认不启用；普通服务启动不会重新生成业务模板。此处按照本轮个人隔离要求清理初始脚本的历史演示 INSERT，不对既有数据库执行删除或覆盖。
+个人空库初始化已移除历史演示角色种子。Java/classpath 角色种子只有在显式设置 `ai.bootstrap.seed-demo-content=true` 时才导入，默认不启用；普通服务启动不会重新生成业务模板。此处按照本轮个人隔离要求清理初始脚本的历史演示 INSERT，不对既有数据库执行删除或覆盖。
 
 交付验证执行完整 `./gradlew clean build --rerun-tasks --no-daemon`、凭据扫描与差异检查。公共库固定为仓库声明的精确版本；GitHub CI 从相应公共库的 main 构建 Maven Local。Git 提交、远端 CI、制品发布与实际部署分别以各自回执为准。

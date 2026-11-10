@@ -7,7 +7,6 @@ import com.kellen.memory.DbChatMemoryService;
 import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
-import com.kellen.questionnaire.ConversationalQuestionnaireService;
 import com.kellen.rag.RagRetrievalClient;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -49,7 +48,6 @@ class AiDialogueTraceTest {
         var patient = mock(PatientMemoryService.class);
         var media = mock(MediaInputValidator.class);
         var prompt = mock(AiRolePromptService.class);
-        var questionnaire = mock(ConversationalQuestionnaireService.class);
         when(memory.shortMemoryContext(any())).thenReturn("");
         when(patient.patientContext(any(), any())).thenReturn("");
         when(media.validateUrlMedia(any())).thenReturn(List.of());
@@ -59,7 +57,7 @@ class AiDialogueTraceTest {
         rag = mock(RagRetrievalClient.class);
         audit = mock(ChatAuditService.class);
         service = new AiDialogueService(memory, media, audit, prompt,
-                mock(ChatConversationService.class), mock(ChatConversationMessageService.class), questionnaire,
+                mock(ChatConversationService.class), mock(ChatConversationMessageService.class),
                 patient, mock(AiModelCallObserver.class), agent, rag);
     }
 
@@ -187,10 +185,11 @@ class AiDialogueTraceTest {
     }
 
     @Test
-    void errorBeforeFallbackEndsExactlyOnceAndKeepsOriginalBusinessResponse() {
+    void propagatedErrorEndsExactlyOnceWithoutOverwritingFailure() {
         Span a = parent("assembly-error");
         Flux<String> stream = assemble(a, Flux.error(new IllegalStateException("synthetic-failure")));
-        assertTrue(stream.collectList().block().get(0).startsWith("\n[模型调用失败]"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> stream.collectList().block())
+                .isInstanceOf(IllegalStateException.class).hasMessage("synthetic-failure");
         assertEquals(1, businessSpans().size());
         assertParent(businessSpans().get(0), a, "error");
     }

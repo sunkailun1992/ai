@@ -1,6 +1,6 @@
 # AI 设计模式规范
 
-本规范约束 AI 在 `ai` 主业务服务中选择、引入和调整设计模式的方式。目标是让 Agent 委托、记忆、审计、问卷状态机和多模态安全边界更清晰，而不是为了展示模式增加抽象。
+本规范约束 AI 在 `ai` 主业务服务中选择、引入和调整设计模式的方式。目标是让 Agent 委托、记忆、审计和多模态安全边界更清晰，而不是为了展示模式增加抽象。
 
 ## 1. 总原则
 
@@ -14,7 +14,7 @@
 
 ### Application Service / Facade
 
-- `AiDialogueService` 是对话用例入口，负责问卷优先路由、Prompt、记忆、Agent 调用和审计编排。
+- `AiDialogueService` 是对话用例入口，负责Prompt、记忆、Agent 调用和审计编排。
 - Controller 保持薄入口，只处理 HTTP 入参出参。
 - 不把 Agent 调用、审计、记忆写入分散到多个 Controller。
 
@@ -47,4 +47,3 @@
 - 不在主 `ai` 服务中新增模型 Provider 工厂。
 - 不在 Controller 中直接绑定厂商 SDK 或 Agent HTTP 地址。
 - 不为当前两个 Agent 过早引入复杂路由引擎；真实出现多 Agent 策略时再抽象。
-- 不把问卷状态机交给 Agent 自由推进。

@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  *
  * <p>主 {@code ai} 服务只保存和裁剪文本上下文，不再实现 Spring AI {@code ChatMemory}
  * 接口。调用模型前由 {@link AiDialogueService} 把窗口内文本整理成上下文传给
- * {@code ai-agent}，避免问卷解释 Prompt 或 Agent 内部实现污染普通对话记忆。</p>
+ * {@code ai-agent}，避免执行层内部提示词或实现细节污染普通对话记忆。</p>
  */
 @Service
 public class DbChatMemoryService {

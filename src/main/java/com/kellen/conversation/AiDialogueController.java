@@ -1,5 +1,6 @@
 package com.kellen.conversation;
 
+import com.kellen.agent.AiAgentExecutionException;
 import com.kellen.auth.AiWechatUserEntity;
 import com.kellen.auth.WechatAuthService;
 import com.kellen.auth.AiRequestIdentityResolver;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
+import org.springframework.http.codec.ServerSentEvent;
 
 import java.util.List;
 
@@ -77,15 +79,35 @@ public class AiDialogueController {
      * @return 模型逐段输出的文本流。
      */
     @PostMapping(value = "/chat", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> chat(@RequestHeader(value = "Authorization", required = false) String authorization,
+    public Flux<ServerSentEvent<String>> chat(@RequestHeader(value = "Authorization", required = false) String authorization,
                              @RequestBody AiChatRequest request) {
         try {
             // fleet subject 与微信 owner 属于不同身份空间，不能把同值 ID 当成同一个微信用户。
             if (identities == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI_IDENTITY_UNAVAILABLE");
-            return dialogueService.stream(request, null, identities.requireIdentity(authorization));
+            var identity = identities.requireIdentity(authorization);
+            return dialogueService.stream(request, null, identity)
+                    .map(text -> ServerSentEvent.builder(text).build())
+                    .onErrorResume(error -> Flux.just(streamError(error)));
         } catch (IllegalArgumentException exception) {
-            return Flux.just("\n[请求参数错误] " + exception.getMessage()); // SSE 请求直接返回文本错误。
+            return Flux.just(streamError(exception));
         }
+    }
+
+    /** 友好文本只在 HTTP 边界生成，内部失败不能触发成功审计或记忆写入。 */
+    private ServerSentEvent<String> streamError(Throwable error) {
+        String message;
+        if (error instanceof AiAgentExecutionException) {
+            message = "\n[AI Agent 调用失败] 请稍后重试";
+        } else if (error instanceof IllegalArgumentException) {
+            message = "\n[请求参数错误] 请求参数无效，请检查后重试。";
+        } else {
+            Throwable root = error;
+            while (root.getCause() != null) root = root.getCause();
+            message = root.getMessage() != null && root.getMessage().contains("Nacos AI Registry")
+                    ? "\n[模型调用失败] AI Agent 注册中心未找到可用接口，请检查 Nacos AI 注册中心的 AgentCard 配置。"
+                    : "\n[模型调用失败] 本轮 AI 响应生成失败，请检查附件类型、附件 URL、Nacos AI Registry 和 ai-agent 服务状态后重试。";
+        }
+        return ServerSentEvent.<String>builder().event("error").data(message).build();
     }
 
     /**

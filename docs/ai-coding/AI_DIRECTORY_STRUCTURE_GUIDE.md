@@ -36,8 +36,8 @@ src/main/java/com/ai
 | 目录 | 职责 |
 | --- | --- |
 | `config` | `ai.*` 类型安全配置绑定、DDL 初始化和 Nacos AI Registry 配置。 |
-| `controller` | AI 对话、问卷、文件和微信认证 HTTP 入口。 |
-| `dto` | 对话、多模态、问卷、文件和记忆接口 DTO。 |
+| `controller` | AI 对话、文件和微信认证 HTTP 入口。 |
+| `dto` | 对话、多模态、文件和记忆接口 DTO。 |
 | `entity` | 业务表 MyBatis-Plus 实体。 |
 | `exception` | 统一异常响应。 |
 | `repository` | MyBatis-Plus Mapper Repository。 |

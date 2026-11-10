@@ -84,6 +84,9 @@ class AiAgentSignedClientHttpTests {
                 byte[] response = body.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", request.uri().getPath().endsWith("/stream")
                         ? "text/event-stream" : "application/json");
+                if (request.uri().getPath().endsWith("/stream")) {
+                    exchange.getResponseHeaders().set("X-AI-Stream-Protocol", "typed-sse-v1");
+                }
                 // 每次订阅验证真实 HTTP/SSE 与签名，不依赖 JDK HttpServer 的 keep-alive 连接回收时序。
                 exchange.getResponseHeaders().set("Connection", "close");
                 exchange.sendResponseHeaders(200, response.length);

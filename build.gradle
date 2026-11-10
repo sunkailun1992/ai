@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.kellen"                               // 发布坐标的 group，与 Java 包名保持一致。
-version = '1.6.4'                                  // 应用版本号；部署包名称由 bootJar 独立配置。
+version = '1.6.5'                                  // 应用版本号；部署包名称由 bootJar 独立配置。
 
 def privateMavenUrl = providers.gradleProperty("privateMavenUrl")
         .orElse(providers.environmentVariable("PRIVATE_MAVEN_URL"))
@@ -20,6 +20,7 @@ ext {
             springCloud       : "2025.1.1",        // Spring Cloud 版本对齐 Spring Boot 4.0.x。
             springCloudAlibaba: "2025.1.0.0",      // Spring Cloud Alibaba 版本用于接入现有 Nacos 体系。
             nacosClient       : "3.2.2",           // Nacos Client 显式对齐当前配置中心 / 注册中心服务端。
+            seata             : "2.6.0",           // 与其它个人服务对齐，包含 Spring Boot 4 自动配置兼容修复。
             mybatisPlus       : "3.5.16",          // MyBatis-Plus 版本对齐 user/message。
             utils             : "1.6.2",           // 公共 utils 包版本，统一 PostgreSQL 数据源与安全观测能力。
             rpcApi            : "1.0.8",           // 公共 RPC 契约包版本，provider/consumer 必须保持一致。
@@ -98,6 +99,10 @@ configurations.configureEach {
                 && (details.requested.name == "nacos-client" || details.requested.name.startsWith("nacos-"))) {
             details.useVersion versions.nacosClient
             details.because "Nacos client must match the 3.2.2 server line used by the shared microservice environment."
+        }
+        if (details.requested.group == "org.apache.seata") {
+            details.useVersion versions.seata
+            details.because "Align the Seata client with the verified Spring Boot 4 compatible fleet version."
         }
     }
 }
