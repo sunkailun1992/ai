@@ -235,3 +235,11 @@ provider/platform/endpoint/bucket/region 创建后固定；KEEP 必须省略两�
 普通 User 对话附件仍使用 `attachments` 中已可访问的 HTTP(S) URL（包括合法的既有文件 token view URL），由原 `MediaInputValidator` 检查数量、协议、Content-Type 和 MIME；本批没有创建 User 直传、登记或文件 owner 管理 API，也不把 User subject 复用为旧 Long owner。User SSE、命名空间记忆与审计，以及存储控制面、X File Storage 和平台管理员门禁保持。
 
 现存 PostgreSQL/MySQL 基线中仍包含退役表结构，历史脚本不会因删代码自动 DROP 或清数据；运行库专属数据/表处理必须单独备份、精确迁移并读回。本批不执行数据库删除，不重放真实模型请求。
+
+## 1.7.0 缺失路由的状态与隐私
+
+1.6.9 已移除旧控制器，但原回环路由测试未导入生产 `ApiExceptionHandler`；实际缺失路由会被其兜底异常处理转成 500。1.7.0 为 Spring MVC 的 `NoResourceFoundException` / `NoHandlerFoundException` 增加通用 404 映射，响应沿用 `AiChatResponse`，固定错误码 `AI_RESOURCE_NOT_FOUND`，不回显路径、查询串或异常原文。没有新增退役路由占位控制器，也不把其它失败视为路由验收成功。
+
+未知异常仍返回 HTTP 500，兜底响应只含固定 `AI_REQUEST_FAILED`，不再拼接异常消息，也不记录原始异常文本。真实 Advice 与合成抛错 Controller 的 HTTP 回归覆盖包含合成凭据、内部 URL、SQL 标记的直接/嵌套异常，验证均不回显；已有公开入参错误的 400 状态和定制文案保持。
+
+回归将生产 Advice 与真实 Controller 一起加载，分别开启/关闭静态资源映射，验证全部 21 个退役路由及任意缺失路由均为安全 404，同时保留文件 view GET/HEAD。离线构建与修复后实际部署的重新读回分别验收；首次实际 500 证据保留，不重写成原先已通过。

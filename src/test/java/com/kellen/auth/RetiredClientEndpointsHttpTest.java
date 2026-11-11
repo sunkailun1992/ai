@@ -3,6 +3,7 @@ package com.kellen.auth;
 import com.kellen.conversation.AiDialogueService;
 import com.kellen.file.AiFileObjectEntity;
 import com.kellen.file.OssFileService;
+import com.kellen.exception.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -18,6 +19,7 @@ import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,8 +74,11 @@ class RetiredClientEndpointsHttpTest {
                 .header("Authorization", "Bearer retired-opaque-session")
                 .header("Content-Type", "application/json")
                 .method(route.method(), HttpRequest.BodyPublishers.ofString("{}"));
-        assertThat(HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.discarding()).statusCode())
+        var response = HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode())
                 .as("%s %s", route.method(), route.path()).isEqualTo(404);
+        assertThat(response.body()).contains("AI_RESOURCE_NOT_FOUND")
+                .doesNotContain(route.path(), "NoResourceFoundException", "NoHandlerFoundException", "retired-opaque-session");
     }
 
     @Test void tokenViewGetAndHeadRemainAvailableWithoutLegacyLogin() throws Exception {
@@ -88,6 +93,15 @@ class RetiredClientEndpointsHttpTest {
             assertThat(get.statusCode()).isEqualTo(302);
             assertThat(get.headers().firstValue("Location")).contains("https://files.example.invalid/private/signed");
         }
+    }
+
+    @Test void unrelatedMissingRoutesAlsoReturn404WithoutPathOrQueryDisclosure() throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
+                + "/unrelated-missing-resource?token=synthetic-sensitive-query")).GET().build();
+        var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body()).contains("AI_RESOURCE_NOT_FOUND")
+                .doesNotContain("unrelated-missing-resource", "synthetic-sensitive-query", "NoResourceFoundException", "NoHandlerFoundException");
     }
 
     @Test void retiredClassesAreAbsentFromTheRuntimeClasspath() {
@@ -106,6 +120,7 @@ class RetiredClientEndpointsHttpTest {
 
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "test.retired-client.fixture", havingValue = "true")
+    @Import(ApiExceptionHandler.class)
     @ComponentScan(basePackages = {"com.kellen.auth", "com.kellen.conversation", "com.kellen.file"},
             useDefaultFilters = false, includeFilters = @ComponentScan.Filter(type = FilterType.ANNOTATION, classes = RestController.class))
     @ImportAutoConfiguration({TomcatServletWebServerAutoConfiguration.class, DispatcherServletAutoConfiguration.class,

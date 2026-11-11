@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局 API 异常处理器。
@@ -15,6 +17,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice // 对所有 REST Controller 全局生效。
 public class ApiExceptionHandler {
+
+    /** MVC 路由或静态资源不存在时保留 404；不回显请求路径、查询串或异常原文。 */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public AiChatResponse notFound() {
+        return AiChatResponse.error("AI_RESOURCE_NOT_FOUND");
+    }
 
     /**
      * 处理入参校验和业务边界错误，返回 400。
@@ -31,12 +40,11 @@ public class ApiExceptionHandler {
     /**
      * 兜底处理未知异常，返回 500。
      *
-     * @param exception 未被前序处理器捕获的异常。
-     * @return 包含错误摘要的统一响应。
+     * @return 只含固定错误码的统一响应，不暴露异常、内部地址、SQL 或凭据。
      */
     @ExceptionHandler(Exception.class) // 兜底捕获未知异常。
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR) // 未知错误返回 500。
-    public AiChatResponse serverError(Exception exception) {
-        return AiChatResponse.error("AI service request failed: " + exception.getMessage()); // 返回摘要错误，避免输出完整堆栈。
+    public AiChatResponse serverError() {
+        return AiChatResponse.error("AI_REQUEST_FAILED");
     }
 }
