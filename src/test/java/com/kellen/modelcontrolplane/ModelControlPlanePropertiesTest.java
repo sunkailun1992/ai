@@ -18,14 +18,16 @@ class ModelControlPlanePropertiesTest {
                         new SystemEnvironmentPropertySource("systemEnvironment", Map.of(
                                 "AI_MODELCONTROLPLANE_APIBASEURL", "https://gateway.example.invalid/prefix",
                                 "AI_MODELCONTROLPLANE_APIKEY", "synthetic-read-only-catalog-fixture",
-                                "AI_MODELCONTROLPLANE_CONSOLEBASEURL", "https://console.example.invalid/ui"))))
+                                "AI_MODELCONTROLPLANE_CONSOLEBASEURL", "https://console.example.invalid/ui",
+                                "AI_MODELCONTROLPLANE_VERIFICATIONFILE", "/fixture-private/model-history.json"))))
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     var properties = context.getBean(ModelControlPlaneProperties.class);
                     assertThat(properties.getApiBaseUrl()).isEqualTo("https://gateway.example.invalid/prefix");
                     assertThat(properties.getApiKey()).isEqualTo("synthetic-read-only-catalog-fixture");
                     assertThat(properties.getConsoleBaseUrl()).isEqualTo("https://console.example.invalid/ui");
-                    assertThat(properties.toString()).doesNotContain("synthetic-read-only-catalog-fixture");
+                    assertThat(properties.getVerificationFile()).isEqualTo("/fixture-private/model-history.json");
+                    assertThat(properties.toString()).doesNotContain("synthetic-read-only-catalog-fixture", "model-history.json");
                 });
     }
 

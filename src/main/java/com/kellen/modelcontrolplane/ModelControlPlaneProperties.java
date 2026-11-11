@@ -10,6 +10,7 @@ public class ModelControlPlaneProperties {
     private String apiBaseUrl = "";
     private String apiKey = "";
     private String consoleBaseUrl = "";
+    private String verificationFile = "";
 
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String value) { apiBaseUrl = value == null ? "" : value; }
@@ -17,6 +18,8 @@ public class ModelControlPlaneProperties {
     public void setApiKey(String value) { apiKey = value == null ? "" : value; }
     public String getConsoleBaseUrl() { return consoleBaseUrl; }
     public void setConsoleBaseUrl(String value) { consoleBaseUrl = value == null ? "" : value; }
+    public String getVerificationFile() { return verificationFile; }
+    public void setVerificationFile(String value) { verificationFile = value == null ? "" : value; }
 
     @Override public String toString() { return "ModelControlPlaneProperties[server-only]"; }
 }

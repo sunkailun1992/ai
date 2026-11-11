@@ -83,6 +83,7 @@ public class ModelControlPlaneService {
     private List<ModelControlPlaneResponse.Deployment> deployments(JsonNode root) {
         if (root == null || !root.isObject() || !root.path("data").isArray()
                 || root.path("data").size() > MAX_MODELS) throw new CatalogUnavailable();
+        var history = ModelVerificationHistory.read(properties.getVerificationFile());
         List<ModelControlPlaneResponse.Deployment> result = new ArrayList<>();
         Set<String> catalogRows = new HashSet<>();
         for (JsonNode row : root.path("data")) {
@@ -100,8 +101,11 @@ public class ModelControlPlaneService {
             JsonNode context = info.path("max_input_tokens");
             Long window = context.isIntegralNumber() && context.canConvertToLong()
                     && context.longValue() > 0 && context.longValue() <= 100_000_000L ? context.longValue() : null;
+            var evidence = history.get(new ModelVerificationHistory.Identity(id, name, model, capability));
             result.add(new ModelControlPlaneResponse.Deployment(id, name, provider, model,
-                    List.of(capability), window, ModelControlPlaneResponse.Verification.NOT_CHECKED, null));
+                    List.of(capability), window,
+                    evidence == null ? ModelControlPlaneResponse.Verification.NOT_CHECKED : evidence.status(),
+                    evidence == null ? null : evidence.verifiedAt()));
         }
         return List.copyOf(result);
     }

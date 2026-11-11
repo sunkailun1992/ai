@@ -207,6 +207,12 @@ PostgreSQL 启动修复补丁版本为 `1.6.4`，公共依赖精确固定 `com:u
 
 只读模型入口从私有服务环境注入 `AI_MODELCONTROLPLANE_APIBASEURL`、`AI_MODELCONTROLPLANE_APIKEY`、`AI_MODELCONTROLPLANE_CONSOLEBASEURL`；变量名称与 Spring 实际 SystemEnvironment 绑定一致，不增加额外下划线。不把 LiteLLM master key 发给浏览器。
 
+可选的 `ai.model-control-plane.verification-file`（环境变量 `AI_MODELCONTROLPLANE_VERIFICATIONFILE`）指向服务账号持有的本机 JSON。使用规范化绝对路径和普通文件，权限为 `0600` 或 `0400`，路径中无符号链接，文件无额外硬链接。目录及各级父目录由服务账号或受信任的运维管理，其他用户无写权限。文件仅含以下格式的历史实测摘要：
+
+`{"entries":[{"deploymentId":"example-id","modelName":"example-alias","model":"provider/example-model","capability":"CHAT","verificationStatus":"VERIFIED","verifiedAt":"2025-06-01T09:00:00Z"}]}`
+
+服务每次读取目录时核对部署 ID、别名、物理模型、能力四项，只有完全匹配才投影历史状态和 ISO 时间。允许 `VERIFIED`、`FAILED`、`UNKNOWN`，最多 256 项、128 KiB UTF-8。文件缺失、无法读取、内容非法或有重复匹配项时，目录继续可用，未匹配的条目显示未验证。文件由运维根据真实验收更新，建议原子替换。凭据或参数变化可能保留相同部署 ID，应同步撤下或更新受影响记录。记录只代表 `verifiedAt` 时刻的实测。目录凭据权限及上游请求范围保持原样。
+
 存储控制面使用本服务新增的 `ai_storage_configuration`、`ai_storage_setting`、`ai_storage_operation`，唯一来源是 DB。三个 profile 不再导入 `storage.yaml`。基础设施连接、DB/MQ、注册发现和观测配置仍属于 Nacos。运行须独立注入 `AI_STORAGE_KEK_B64`（32 字节随机主密钥的标准 Base64）、`AI_STORAGE_KEK_ID`（非秘密版本标识，默认 v1）及 `AI_STORAGE_ALLOWED_ORIGINS`（逗号分隔 MinIO/S3 完整 origin 白名单）。KEK 不复用 JWT/LiteLLM，也不从 Nacos/Spring 业务属性读取；缺 key/空 DB 不阻止其它 AI 功能启动，实际文件操作明确不可用。
 
 管理接口统一要求活跃平台超级管理员及 `user:auth:manage`，列表/配置/设置也不能由普通用户读取：
