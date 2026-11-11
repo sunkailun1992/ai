@@ -1,6 +1,7 @@
 package com.kellen.audit;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.kellen.repository.AiGovernanceEntity;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -18,6 +19,9 @@ public class ChatMessageEntity extends AiGovernanceEntity {
 
     @TableId(type = IdType.AUTO)
     private Long id; // 审计记录主键。
+
+    @TableField("tenant_id")
+    private String tenantId; // 已验证的调用租户，显式写入，不依赖租户插件或数据库默认值。
 
     private String conversationId; // 会话 ID，调用方未传时归一化为 default。
 
@@ -42,6 +46,7 @@ public class ChatMessageEntity extends AiGovernanceEntity {
     /**
      * 构建一条成功的审计记录。
      *
+     * @param tenantId         已验证的调用租户，不能为空。
      * @param conversationId   会话 ID，可空。
      * @param messageType      调用类型，当前对话统一为 chat_stream。
      * @param model            本轮实际调用的模型名。
@@ -51,8 +56,9 @@ public class ChatMessageEntity extends AiGovernanceEntity {
      * @param mediaSummary     媒体摘要，可空。
      * @return 已填充成功状态的实体。
      */
-    public static ChatMessageEntity success(String conversationId, String messageType, String model, String userMessage, String systemPrompt, String assistantContent, String mediaSummary) {
+    public static ChatMessageEntity success(String tenantId, String conversationId, String messageType, String model, String userMessage, String systemPrompt, String assistantContent, String mediaSummary) {
         ChatMessageEntity entity = new ChatMessageEntity(); // 创建实体实例。
+        entity.tenantId = requiredTenantId(tenantId);
         entity.conversationId = normalizeConversationId(conversationId); // 归一化会话 ID。
         entity.messageType = messageType; // 保存调用类型。
         entity.model = model; // 保存模型名。
@@ -67,6 +73,7 @@ public class ChatMessageEntity extends AiGovernanceEntity {
     /**
      * 构建一条失败的审计记录，保证失败调用也可追溯。
      *
+     * @param tenantId       已验证的调用租户，不能为空。
      * @param conversationId 会话 ID，可空。
      * @param messageType    调用类型，当前对话统一为 chat_stream。
      * @param model          本轮实际调用的模型名。
@@ -76,8 +83,9 @@ public class ChatMessageEntity extends AiGovernanceEntity {
      * @param mediaSummary   媒体摘要，可空。
      * @return 已填充失败状态的实体。
      */
-    public static ChatMessageEntity failure(String conversationId, String messageType, String model, String userMessage, String systemPrompt, String errorMessage, String mediaSummary) {
+    public static ChatMessageEntity failure(String tenantId, String conversationId, String messageType, String model, String userMessage, String systemPrompt, String errorMessage, String mediaSummary) {
         ChatMessageEntity entity = new ChatMessageEntity(); // 创建实体实例。
+        entity.tenantId = requiredTenantId(tenantId);
         entity.conversationId = normalizeConversationId(conversationId); // 归一化会话 ID。
         entity.messageType = messageType; // 保存调用类型。
         entity.model = model; // 保存模型名。
@@ -93,9 +101,18 @@ public class ChatMessageEntity extends AiGovernanceEntity {
      * MyBatis-Plus 写入前自动初始化创建时间。
      */
     void prePersist() {
+        requiredTenantId(tenantId); // 直接构造实体也不能省略租户后落入数据库默认值。
         if (createdAt == null) { // 只在未显式赋值时设置。
             createdAt = LocalDateTime.now(); // 使用当前服务端时间。
         }
+    }
+
+    /** 与既有 tenant_id varchar(64) 列对齐；禁止默认租户、ambient 回退或静默截断。 */
+    private static String requiredTenantId(String tenantId) {
+        if (tenantId == null || !tenantId.matches("[A-Za-z0-9_-]{1,64}")) {
+            throw new IllegalArgumentException("AI_AUDIT_TENANT_INVALID");
+        }
+        return tenantId;
     }
 
     /**

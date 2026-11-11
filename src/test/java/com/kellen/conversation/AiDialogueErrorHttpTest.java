@@ -112,8 +112,8 @@ class AiDialogueErrorHttpTest {
     private void assertFailurePersistence() {
         assertThat(metrics.get("ai.model.call.count").tag("outcome", "failure").counter().count()).isEqualTo(1);
         assertThat(metrics.find("ai.model.call.count").tag("outcome", "success").counter()).isNull();
-        verify(audit).recordFailure(any(), any(), any(), any(), any(), any(), any());
-        verify(audit, never()).recordSuccess(any(), any(), any(), any(), any(), any(), any());
+        verify(audit).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(audit, never()).recordSuccess(any(), any(), any(), any(), any(), any(), any(), any());
         verify(memory, never()).addMessage(any(), eq("assistant"), any());
         verify(history, never()).recordAssistantMessage(any(), any(), any());
     }

@@ -201,7 +201,7 @@ public class AiDialogueService {
                 .doOnComplete(() -> observation.run(() -> {
                     String assistantContent = content.toString();
                     modelCallObserver.success(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
-                    chatAuditService.recordSuccess(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
+                    chatAuditService.recordSuccess(identity, normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), assistantContent, mediaSummary);
                     dbChatMemoryService.addMessage(normalizedConversationId, "assistant", assistantContent);
                     chatConversationMessageService.recordAssistantMessage(ownerUserId, normalizedConversationId, assistantContent);
@@ -209,12 +209,12 @@ public class AiDialogueService {
                 .doOnError(exception -> observation.run(() -> {
                     observation.failed();
                     modelCallObserver.failure(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
-                    chatAuditService.recordFailure(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
+                    chatAuditService.recordFailure(identity, normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), rootMessage(exception), mediaSummary);
                 }))
                 .doOnCancel(() -> observation.run(() -> {
                     modelCallObserver.cancelled(AGENT_PROVIDER, PATIENT_ANALYSIS_AGENT, messageType, startedAt);
-                    chatAuditService.recordFailure(normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
+                    chatAuditService.recordFailure(identity, normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), "stream cancelled by client", mediaSummary);
                 }));
     }

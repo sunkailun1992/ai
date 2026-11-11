@@ -185,6 +185,8 @@ User subject 与微信 user ID 使用独立身份空间。User 聊天不冒充�
 
 本轮身份在入口捕获为不可变值，RAG 预取与异步审计回调只在当前执行线程绑定已验证租户并恢复旧状态；纯 HTTP 订阅阶段临时清空 ambient 租户，防止新 worker 继承伪造请求头。调用 Agent 时 token 只通过 Authorization header 转发，不能进入签名正文、DTO、日志或异常；Agent 独立复核后才使用其租户调用 Memory。源码测试、HTTP 测试与真实整链读回分别验收。
 
+从 1.6.8 起，成功、失败和取消审计均由 `ChatAuditService` 接收本轮已验证身份，将其 `tenantId` 显式写入 `ai_chat_message.tenant_id`。身份缺失、租户为空或超出既有列的 64 字符边界时，在 SQL 前拒绝；不从来源分区、线程上下文或数据库默认租户补值。即使 `tenant.enabled=false`，审计仍保存实际调用租户。异步回调的租户绑定与上下文恢复继续保留，平台模型、Prompt、存储等全局配置的作用域不变。此次仅修复后续写入，不增加 DDL，也不推断或回填历史默认租户 `1` 的记录。真实 MyBatis/H2 PostgreSQL 模式回归保留数据库默认 `1`，覆盖 A/B 成功、失败、取消及 worker 复用；实际部署后的审计读回另行验收。
+
 ### Agent 流式响应协议
 
 患者分析请求显式发送 `Accept: text/event-stream`。Agent 响应必须为 HTTP 2xx 并声明 `text/event-stream`（允许 charset 等参数），不能将 JSON、普通文本、缺失或非法 Content-Type 当作模型输出。协议失败仅使用固定 `AI_AGENT_STREAM_PROTOCOL_INVALID`，不把上游正文或响应头带入异常。HTTP 4xx/5xx 保留原有 `WebClientResponseException` 状态处理；其他非 2xx 均拒绝，重定向即使带合法 SSE 也不接受，不自动跟随或重试。

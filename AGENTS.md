@@ -56,7 +56,7 @@
 - 对话会话列表统一写入 `ai_chat_conversation`，用于小程序恢复历史、新建会话和切换会话；所有查询必须校验所属微信用户。
 - 小程序聊天历史展示写入 `ai_chat_conversation_message`，用于恢复文本和附件预览；图片、报告等附件不得塞进 `ai_chat_memory`。
 - 对话记忆统一通过 `DbChatMemoryService` 维护，模型上下文写入 `ai_chat_memory`，由 `MessageChatMemoryAdvisor` 自动回放。
-- 对话审计记录统一写入 `ai_chat_message`，系统参数统一写入 `system_parameter`。
+- 对话审计记录统一写入 `ai_chat_message`；成功、失败和取消均必须由本轮已验证 `AiRequestIdentity` 显式写入 `tenant_id`，不依赖全局租户插件、来源分区、ambient 上下文或数据库默认值。系统参数统一写入 `system_parameter`。
 - 角色 Prompt 统一写入 `ai_role_prompt`，新增角色不得把完整长 Prompt 固化到 YAML。
 - 微信小程序登录接口统一放在 `/api/auth`，用户写入 `ai_wechat_user`，登录态写入 `ai_wechat_session`；小程序端只能保存 Bearer token，不能保存 appSecret、openid 或 sessionKey。
 - 小程序文件上传采用后端签发 OSS PostObject 策略、小程序直传、后端完成登记的模式；业务侧只保存 `ai_file_object.object_key` 和展示 token 哈希，禁止把公共 OSS URL 作为业务文件地址保存或传给 AI。

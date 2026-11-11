@@ -1,5 +1,6 @@
 package com.kellen.audit;
 
+import com.kellen.auth.AiRequestIdentity;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,6 +27,7 @@ public class ChatAuditService {
     /**
      * 记录一次成功的模型调用。
      *
+     * @param identity         User 认证中心验证的本轮身份。
      * @param conversationId   会话 ID，空值由实体归一化为 default。
      * @param messageType      调用类型，当前对话统一为 chat_stream。
      * @param model            本轮实际调用的模型名。
@@ -34,13 +36,14 @@ public class ChatAuditService {
      * @param assistantContent 模型返回内容。
      * @param mediaSummary     多模态媒体摘要，纯文本调用为空。
      */
-    public void recordSuccess(String conversationId, String messageType, String model, String userMessage, String systemPrompt, String assistantContent, String mediaSummary) {
-        chatMessageRepository.save(ChatMessageEntity.success(conversationId, messageType, model, userMessage, systemPrompt, assistantContent, mediaSummary)); // 写入成功审计记录。
+    public void recordSuccess(AiRequestIdentity identity, String conversationId, String messageType, String model, String userMessage, String systemPrompt, String assistantContent, String mediaSummary) {
+        chatMessageRepository.save(ChatMessageEntity.success(requiredTenant(identity), conversationId, messageType, model, userMessage, systemPrompt, assistantContent, mediaSummary)); // 写入成功审计记录。
     }
 
     /**
      * 记录一次失败的模型调用，保证失败也可追溯。
      *
+     * @param identity       User 认证中心验证的本轮身份。
      * @param conversationId 会话 ID，空值由实体归一化为 default。
      * @param messageType    调用类型，当前对话统一为 chat_stream。
      * @param model          本轮实际调用的模型名。
@@ -49,7 +52,14 @@ public class ChatAuditService {
      * @param errorMessage   失败错误摘要。
      * @param mediaSummary   多模态媒体摘要，纯文本调用为空。
      */
-    public void recordFailure(String conversationId, String messageType, String model, String userMessage, String systemPrompt, String errorMessage, String mediaSummary) {
-        chatMessageRepository.save(ChatMessageEntity.failure(conversationId, messageType, model, userMessage, systemPrompt, errorMessage, mediaSummary)); // 写入失败审计记录。
+    public void recordFailure(AiRequestIdentity identity, String conversationId, String messageType, String model, String userMessage, String systemPrompt, String errorMessage, String mediaSummary) {
+        chatMessageRepository.save(ChatMessageEntity.failure(requiredTenant(identity), conversationId, messageType, model, userMessage, systemPrompt, errorMessage, mediaSummary)); // 写入失败审计记录。
+    }
+
+    private static String requiredTenant(AiRequestIdentity identity) {
+        if (identity == null) {
+            throw new SecurityException("AI_IDENTITY_REQUIRED");
+        }
+        return identity.tenantId();
     }
 }

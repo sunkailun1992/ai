@@ -88,11 +88,12 @@ class AiDialogueTraceTest {
     @Test
     void asyncTerminalPersistenceUsesTheDialogueContextAndRestoresTheWorker() {
         doAnswer(invocation -> {
+            assertEquals("tenant-a", ((com.kellen.auth.AiRequestIdentity) invocation.getArgument(0)).tenantId());
             assertEquals("tenant-a", com.kellen.utils.context.TenantContextHolder.getTenantId());
             var child = GlobalOpenTelemetry.getTracer("test").spanBuilder("fixture.audit.write").startSpan();
             child.end();
             return null;
-        }).when(audit).recordSuccess(any(), any(), any(), any(), any(), any(), any());
+        }).when(audit).recordSuccess(any(), any(), any(), any(), any(), any(), any(), any());
         var worker = reactor.core.scheduler.Schedulers.newSingle("dialogue-terminal-test");
         Span parent = parent("entry");
         try {
