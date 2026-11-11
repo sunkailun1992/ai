@@ -57,7 +57,6 @@ class AiDialogueTraceTest {
         rag = mock(RagRetrievalClient.class);
         audit = mock(ChatAuditService.class);
         service = new AiDialogueService(memory, media, audit, prompt,
-                mock(ChatConversationService.class), mock(ChatConversationMessageService.class),
                 patient, mock(AiModelCallObserver.class), agent, rag);
     }
 
@@ -76,7 +75,7 @@ class AiDialogueTraceTest {
         when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(output);
         try (var ignored = parent.makeCurrent()) {
-            return service.stream(new AiChatRequest("fixture", "synthetic-question", null), null,
+            return service.stream(new AiChatRequest("fixture", "synthetic-question", null),
                     new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token"));
         }
     }
@@ -227,7 +226,7 @@ class AiDialogueTraceTest {
                 worker.submit(() -> {
                     com.kellen.utils.context.TenantContextHolder.setTenantId("prior-worker");
                     try {
-                        assertEquals(List.of("synthetic-output"), service.stream(request, null, identity).collectList().block());
+                        assertEquals(List.of("synthetic-output"), service.stream(request, identity).collectList().block());
                         assertEquals("prior-worker", com.kellen.utils.context.TenantContextHolder.getTenantId());
                     } finally { com.kellen.utils.context.TenantContextHolder.clear(); }
                 }).get(5, TimeUnit.SECONDS);

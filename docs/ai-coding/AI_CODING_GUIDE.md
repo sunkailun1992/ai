@@ -8,7 +8,7 @@
 
 ## 1. 项目定位
 
-`ai` 是 AI 患者分析助手的主业务服务。它负责入口编排、微信小程序用户、会话、文件 token、普通聊天记忆和调用审计。
+`ai` 是 AI 患者分析助手的主业务服务。它负责User 认证入口编排、文件 token、普通聊天记忆和调用审计。
 
 真实模型执行属于 `ai-agent` 或后续独立 Agent 服务。主 `ai` 服务只通过 Nacos AI Registry 读取 AgentCard，再调用 Agent 暴露的 HTTP 接口；不得重新引入 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仅作为备用向量数据库连接配置保留，是否实际连接由明确业务入口和开关控制。
 
@@ -97,8 +97,7 @@
 
 - `ai_chat_memory` 只保存普通聊天 user / assistant 文本上下文。
 - 主服务在调用 Agent 前裁剪记忆窗口，并以文本上下文传给 Agent。
-- `ai_chat_conversation` 是小程序会话元数据表。
-- `ai_chat_conversation_message` 是小程序历史展示表，可保存附件 JSON。
+- 微信 owner 会话元数据/历史展示能力已退役；不重新注册旧实体、Repository 或会话管理路由。
 - `ai_chat_message` 是审计表，不是模型记忆表。
 
 ## 8. 数据库规则
@@ -144,4 +143,4 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 
 聊天及记忆读取/清理要求 User access JWT，由 User `AuthSessionRpcService` 复核完整生命周期与账号租户授权。不能把 `X-User-*`、正文 `sourceTenantId` 或历史默认 `100` 当作授权身份。入口捕获的不可变 subject/tenant 在每个执行线程短暂绑定并恢复；终端 token 只作为 Authorization header 转发给验签后的 Agent，不能进入正文或日志。
 
-User JWT 与微信 opaque token 是不同身份空间，不可将同值 User ID 当微信 owner。User 聊天按 authTenant + subject + 客户端原始 conversationId 建内部摘要键；客户端双轮继续原 ID，不能从 `fleet_` 前缀信任任意内部键。微信登录/会话 owner 校验保持，未建立可信 User 映射前微信 opaque 不能使用 scoped 聊天；这种 fail-closed 是显式兼容变化，不宣称原微信聊天体验已验收。
+User 聊天按 authTenant + subject + 客户端原始 conversationId 建内部摘要键；客户端双轮继续原 ID，不能从 `fleet_` 前缀信任任意内部键。微信登录、owner 会话及旧上传管理路由已删除；不提供 User ID 到旧 owner 的隐式映射。普通附件继续使用可访问 URL 与通用 token view；不宣称已实现 User 直传管理 API。

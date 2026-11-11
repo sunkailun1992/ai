@@ -34,15 +34,29 @@ class AiIdentityHttpTest {
                 "{\"conversationId\":\"client-id\",\"message\":\"synthetic\",\"tenantId\":\"forged\",\"userId\":\"forged\"}"))
                 .build(),HttpResponse.BodyHandlers.ofString());
     }
-    @Test void anonymousForgedHeadersInvalidAndWechatOpaqueTokensCannotOpenScopedChat() throws Exception {
+    @Test void anonymousForgedHeadersInvalidAndOpaqueTokensCannotOpenScopedChat() throws Exception {
         assertThat(send(null,"X-User-Id","forged","X-Tenant-Id","forged").statusCode()).isEqualTo(401);
         assertThat(send("Bearer invalid").statusCode()).isEqualTo(401);
         assertThat(send("Bearer opaque-wechat-session").statusCode()).isEqualTo(401);
     }
-    @Test void onlyUserVerifiedIdentityReachesDialogueAndDoesNotBecomeWechatOwner() throws Exception {
+    @Test void onlyUserVerifiedIdentityReachesDialogue() throws Exception {
         var response=send("Bearer synthetic-user-token");
         assertThat(response.statusCode()).isEqualTo(200); assertThat(response.body()).contains("verified");
         assertThat(response.body()).doesNotContain("synthetic-user-token","tenant-a","user-a");
+    }
+    @Test void userMemoryReadsAndClearStayNamespacedAndRejectOpaqueSessions() throws Exception {
+        var client=HttpClient.newHttpClient();
+        for(String method:java.util.List.of("GET","DELETE")) {
+            var uri=URI.create("http://127.0.0.1:"+port+"/api/ai/memory/client-id");
+            var request=HttpRequest.newBuilder(uri).header("Authorization","Bearer synthetic-user-token")
+                    .method(method,HttpRequest.BodyPublishers.noBody()).build();
+            var response=client.send(request,HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).doesNotContain("synthetic-user-token","tenant-a","user-a","fleet_");
+            var rejected=HttpRequest.newBuilder(uri).header("Authorization","Bearer opaque-retired-session")
+                    .method(method,HttpRequest.BodyPublishers.noBody()).build();
+            assertThat(client.send(rejected,HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(401);
+        }
     }
     @Configuration @ConditionalOnProperty(name="test.identity.fixture",havingValue="true") @ImportAutoConfiguration({TomcatServletWebServerAutoConfiguration.class,
             DispatcherServletAutoConfiguration.class,WebMvcAutoConfiguration.class,HttpMessageConvertersAutoConfiguration.class})
@@ -53,13 +67,24 @@ class AiIdentityHttpTest {
         });}
         @Bean AiDialogueService dialogue(){
             var service=mock(AiDialogueService.class);
-            when(service.stream(any(),isNull(),any())).thenAnswer(call->{
-                AiRequestIdentity identity=call.getArgument(2);assertThat(identity.userId()).isEqualTo("user-a");
+            when(service.stream(any(),any())).thenAnswer(call->{
+                AiRequestIdentity identity=call.getArgument(1);assertThat(identity.userId()).isEqualTo("user-a");
                 assertThat(identity.tenantId()).isEqualTo("tenant-a");return Flux.just("verified");
+            });
+            String key=new AiRequestIdentity("user-a","tenant-a","synthetic-user-token").conversationKey("client-id");
+            when(service.memoryMessages(any())).thenAnswer(call->{
+                assertThat((String)call.getArgument(0)).isEqualTo(key);
+                assertThat(com.kellen.utils.context.TenantContextHolder.getTenantId()).isEqualTo("tenant-a");
+                return java.util.List.of(new com.kellen.memory.ChatMemoryMessageDto("assistant","synthetic-memory",java.time.LocalDateTime.now()));
+            });
+            when(service.clearMemory(any())).thenAnswer(call->{
+                assertThat((String)call.getArgument(0)).isEqualTo(key);
+                assertThat(com.kellen.utils.context.TenantContextHolder.getTenantId()).isEqualTo("tenant-a");
+                return AiChatResponse.ok("patient-analysis-agent","cleared");
             });return service;
         }
         @Bean AiDialogueController controller(AiDialogueService service,AiRequestIdentityResolver identities){
-            return new AiDialogueController(service,mock(WechatAuthService.class),mock(ChatConversationService.class),identities);
+            return new AiDialogueController(service,identities);
         }
     }
 }

@@ -145,9 +145,7 @@ class MediaInputValidatorTests {
     private static AiProperties testProperties(int maxMediaCount) {
         return new AiProperties(
                 new AiProperties.DialogueProperties("patient-analysis", "测试提示词", maxMediaCount, 20971520, List.of("http", "https"),
-                        List.of("image/*", "text/plain", "application/json"), new AiProperties.MemoryProperties(20, 7)),
-                new AiProperties.WechatProperties("wx-test", "", 30), // 微信登录不参与媒体校验测试。
-                new AiProperties.OssProperties("oss-cn-hangzhou.aliyuncs.com", "", "", "", "ai-miniapp", 60, 1800, 52428800)); // OSS 不参与媒体校验测试。
+                        List.of("image/*", "text/plain", "application/json"), new AiProperties.MemoryProperties(20, 7)));
     }
 
     /**

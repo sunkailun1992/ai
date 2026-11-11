@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-/** AI scoped 能力使用认证中心 User JWT；微信 opaque 会话仍由既有微信服务维护归属。 */
+/** AI scoped 能力使用认证中心 User JWT，拒绝未验证或已退役的 opaque 会话。 */
 @Service
 public class AiRequestIdentityResolver {
     private final AuthSessionRpcService sessions;

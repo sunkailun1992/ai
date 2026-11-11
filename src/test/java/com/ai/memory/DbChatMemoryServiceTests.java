@@ -86,8 +86,6 @@ class DbChatMemoryServiceTests {
     private static AiProperties testProperties(int maxMessages, int windowDays) {
         return new AiProperties(
                 new AiProperties.DialogueProperties("patient-analysis", "测试提示词", 4, 20971520, List.of("http", "https"),
-                        List.of("image/*", "text/plain"), new AiProperties.MemoryProperties(maxMessages, windowDays)),
-                new AiProperties.WechatProperties("wx-test", "", 30), // 微信登录不参与记忆窗口测试。
-                new AiProperties.OssProperties("oss-cn-hangzhou.aliyuncs.com", "", "", "", "ai-miniapp", 60, 1800, 52428800)); // OSS 不参与记忆窗口测试。
+                        List.of("image/*", "text/plain"), new AiProperties.MemoryProperties(maxMessages, windowDays)));
     }
 }

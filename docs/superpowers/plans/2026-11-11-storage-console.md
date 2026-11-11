@@ -1,5 +1,7 @@
 # 私有存储控制台实施计划
 
+> 历史 1.6.7 设计/执行记录。1.6.9 已移除微信认证、owner 会话和上传管理入口；当前合同见 README 的退役章节，DB registry 与既有文件 token 展示保留。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 用 AI 管理 API/加密 DB 管理私有 OSS、COS、MinIO/S3-compatible，旧文件仍按原平台读取。

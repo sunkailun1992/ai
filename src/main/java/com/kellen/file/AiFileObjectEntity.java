@@ -8,7 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
 /**
- * AI 小程序文件对象实体，对应 ai_file_object 表。
+ * 既有私有文件对象实体，对应 ai_file_object 表。
  *
  * <p>业务侧只保存 OSS objectKey 和展示 token 哈希，不保存公共 OSS URL。
  * 图片、PDF、JSON 等资料展示时必须走后端 token 校验和短时签名跳转。</p>
@@ -21,7 +21,7 @@ public class AiFileObjectEntity extends AiGovernanceEntity {
     @TableId(type = IdType.AUTO)
     private Long id; // 文件 ID。
 
-    private Long ownerUserId; // 所属微信用户 ID。
+    private Long ownerUserId; // 历史登记的 owner ID；不与 User subject 混用。
 
     private String storagePlatform; // 对象存储平台；空值为迁移前的 OSS。
 
@@ -46,7 +46,7 @@ public class AiFileObjectEntity extends AiGovernanceEntity {
     /**
      * 创建文件对象元数据。
      *
-     * @param ownerUserId      所属微信用户 ID。
+     * @param ownerUserId      历史登记的 owner ID；不与 User subject 混用。
      * @param objectKey        OSS objectKey。
      * @param originalName     原始文件名。
      * @param mimeType         MIME 类型。

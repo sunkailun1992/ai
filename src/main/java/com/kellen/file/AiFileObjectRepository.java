@@ -8,7 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import java.util.Optional;
 
 /**
- * AI 小程序文件对象 Repository。
+ * 既有私有文件对象 Repository。
  *
  * <p>负责读取和保存私有 OSS 对象元数据；展示 token 明文不入库，
  * 只能通过业务服务生成、哈希和校验。</p>

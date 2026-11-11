@@ -4,7 +4,7 @@
 
 个人公共包固定为 `com:utils:1.6.3`，跨服务契约固定为 `com:rpc-api:1.0.8`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
 
-本服务只负责入口编排、微信小程序用户、会话、文件 token、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
+本服务只负责User 认证入口编排、文件 token、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
 
 代码分支使用 `main`（正式主干）、`test`（整合测试）、`preprod`（候选预发）与短功能分支。分支不自动改变运行 profile；完整功能进入远端 main 并核对后，按本任务授权清理本地与远程功能分支，保护未合、其他 worktree 占用及长期分支。细则见 [分支管理规范](docs/ai-coding/BRANCHING_SPEC.md)。
 
@@ -16,12 +16,12 @@
 
 ## 核心能力
 
-- 统一 AI 入口：`POST /api/ai/chat` 负责小程序和外部调用的 SSE 对话入口。
+- 统一 AI 入口：`POST /api/ai/chat` 要求已验证 User 身份的 SSE 对话入口。
 - Agent 委托：通过 Nacos AI Registry 查找 `patient-analysis-agent` 的接口地址。
 - 患者分析助手：角色 Prompt 存在 `ai_role_prompt`，主服务解析后传给 `ai-agent` 执行。
 - 数据库记忆：`ai_chat_memory` 只保存普通对话 user / assistant 文本上下文。
 - 调用审计：`ai_chat_message` 保存请求、响应、Agent、媒体摘要和错误摘要。
-- 私有文件：通过 DB 控制面与 X File Storage 统一接入 OSS / COS / MinIO / S3-compatible，采用 token 展示模式，小程序不保存公共对象 URL。
+- 私有文件：通过 DB 控制面与 X File Storage 统一接入 OSS / COS / MinIO / S3-compatible，保留既有文件的 token 展示模式；存储管理不等于新 User 直传 API。
 
 ## 技术栈
 
@@ -53,7 +53,7 @@ AiDialogueController
 职责边界：
 
 - `AiDialogueController`：HTTP 入参、路径映射和 SSE 返回。
-- `AiDialogueService`：角色 Prompt、记忆裁剪、Agent 调用、审计和历史展示。
+- `AiDialogueService`：角色 Prompt、记忆裁剪、Agent 调用和审计。
 - `NacosAiAgentRegistryClient`：使用 Nacos 3.x 官方 AI SDK 读取 AgentCard。
 - `AiAgentClient`：只按 AgentCard 接口地址调用 `ai-agent`，不保存本地 baseUrl 兜底。
 - `DbChatMemoryService`：保存主服务可控的普通对话记忆，不实现 Spring AI ChatMemory。
@@ -135,7 +135,6 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 - `ai_chat_memory`：模型上下文记忆。
 - `ai_role_prompt`：患者分析等角色 Prompt。
 - `ai_file_object`：私有文件元数据、持久化存储平台和展示 token。
-- `ai_wechat_user` / `ai_wechat_session`：小程序用户和登录态。
 
 表结构由 `src/main/java/com/kellen/config/PostgresqlDdl.java` 依序加载 `db/postgresql/common-infra-schema.sql` 和 `db/postgresql/ai-schema.sql` 维护。公共基础表脚本来自 `utils`，必须在首次启动前手动执行，确保 `ddl_history` 和 Seata AT `undo_log` 先于应用数据源初始化存在。历史 `db/ai-init.sql` 与增量脚本保留，不在 PostgreSQL 上执行。个人空库不自动导入业务角色种子；Java 演示种子须显式设置 `ai.bootstrap.seed-demo-content=true`。快速业务回归使用 H2；PostgreSQL 差异另由真实 PG 测试验证。
 
@@ -179,9 +178,9 @@ PostgreSQL 启动修复补丁版本为 `1.6.4`，公共依赖精确固定 `com:u
 
 ### AI 可信身份与会话隔离
 
-`/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 现在要求个人 User 中心签发的有效 access JWT。AI 通过 `com:rpc-api:1.0.8` 的 `AuthSessionRpcService` 验证签名、issuer、有效期、access 类型、jti、撤销状态、tokenVersion、启用账号及有效租户授权。匿名、伪造用户/租户头及微信 opaque token 不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。
+`/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 现在要求个人 User 中心签发的有效 access JWT。AI 通过 `com:rpc-api:1.0.8` 的 `AuthSessionRpcService` 验证签名、issuer、有效期、access 类型、jti、撤销状态、tokenVersion、启用账号及有效租户授权。匿名、伪造用户/租户头及旧 opaque token 不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。
 
-User subject 与微信 user ID 使用独立身份空间。User 聊天不冒充微信 owner；内部会话键为经过验证的租户、subject 和客户端原始 `conversationId` 的固定摘要。SSE 继续只返回文本，客户端每轮传同一个原始 ID，不能把内部键当作新的公开会话 ID；直接传 `fleet_...` 也会按当前身份重新隔离。原微信登录及 `/conversations` 的 owner 校验保持，微信聊天需要后续明确的 User 身份映射才能使用 scoped 能力，本次不虚构映射或沿用默认租户。
+内部会话键为经过验证的租户、subject 和客户端原始 `conversationId` 的固定摘要。SSE 继续返回文本数据和既有 typed error，客户端每轮传同一个原始 ID，不能把内部键当作新的公开会话 ID；直接传 `fleet_...` 也会按当前身份重新隔离。
 
 本轮身份在入口捕获为不可变值，RAG 预取与异步审计回调只在当前执行线程绑定已验证租户并恢复旧状态；纯 HTTP 订阅阶段临时清空 ambient 租户，防止新 worker 继承伪造请求头。调用 Agent 时 token 只通过 Authorization header 转发，不能进入签名正文、DTO、日志或异常；Agent 独立复核后才使用其租户调用 Memory。源码测试、HTTP 测试与真实整链读回分别验收。
 
@@ -226,3 +225,13 @@ provider/platform/endpoint/bucket/region 创建后固定；KEEP 必须省略两�
 每个 DB revision 独立装载 XFS 原生客户端；首次使用/只读管理查询会按需装载，旧 lease 排空才关闭。APPLIED 只表示本实例已装载该 revision，不能当作存储健康。探针只写固定 owned 前缀的合成对象，记录真实 WRITE/EXISTS/READ/VERIFY_PRIVATE/CLEANUP，finally 一次删除并读回缺失。匿名网络错误/未知状态不能当作私有拒绝，只有明确 401/403 通过。持久 RUNNING 在进程恢复后变 UNKNOWN，不恢复写入；读取使用条件 CAS，不能用迟到 RUNNING 快照覆盖 worker 终态。未能确认清理的操作会阻止配置变更，需运维按精确 owned 对象处理，页面不能批量删除或盲目重试。
 
 本批精确消费 `com:utils:1.6.3`（COS SDK 5.6.283），rpc-api 保持 1.0.8，其余服务不强制升级。离线验证使用真实官方 SDK/XFS 与回环 HTTP，并不证明真实云账号的 ACL/网络可用；每个已配置 provider 的真实读写与隐私拒绝仍须独立运行验收。当前没有历史文件数据时，只能报告原 platform/null 映射 fixture 回归，不能声称恢复已有用户文件。
+
+## 1.6.9 小程序服务端退役
+
+移除微信认证 `/api/auth` 与 `/api/v1/auth` 下的 `wx-login`、`me`、`logout`、`test-domain`，以及 `/api/ai/conversations` 的创建、列表、消息、删除和重命名；不保留空实现或 opaque token 兼容认证。微信用户/会话与 owner 专属会话/展示消息的实体、Repository、Service、请求响应类均不再注册。
+
+移除 `/api/files` 与 `/api/v1/files` 下旧 `upload-policy`、`complete`、`/{fileId}` 元数据和 `/{fileId}/view-token` 刷新入口。保留 `/{fileId}/view?token=...` 的 GET/HEAD、既有文件记录和 token 校验；签名继续固定文件保存的平台，null 平台使用 DB 的 `legacyNullPlatform` 映射，不能换成当前默认平台。`OssFileService` 只使用 DB registry，不再保留旧微信上传入口或测试专用 Nacos OSS 回退构造器；`AiProperties` 不再绑定旧微信/OSS 业务凭据。
+
+普通 User 对话附件仍使用 `attachments` 中已可访问的 HTTP(S) URL（包括合法的既有文件 token view URL），由原 `MediaInputValidator` 检查数量、协议、Content-Type 和 MIME；本批没有创建 User 直传、登记或文件 owner 管理 API，也不把 User subject 复用为旧 Long owner。User SSE、命名空间记忆与审计，以及存储控制面、X File Storage 和平台管理员门禁保持。
+
+现存 PostgreSQL/MySQL 基线中仍包含退役表结构，历史脚本不会因删代码自动 DROP 或清数据；运行库专属数据/表处理必须单独备份、精确迁移并读回。本批不执行数据库删除，不重放真实模型请求。

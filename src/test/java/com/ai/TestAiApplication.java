@@ -3,8 +3,6 @@ package com.ai;
 import com.kellen.config.AiAgentClientProperties;
 import com.kellen.config.AiProperties;
 import com.kellen.config.NacosAiAgentRegistryProperties;
-import com.kellen.config.aliyun.CommonAliyunProperties;
-import com.kellen.config.wechat.CommonWechatProperties;
 import com.baomidou.dynamic.datasource.spring.boot.autoconfigure.DynamicDataSourceAutoConfiguration;
 import com.baomidou.dynamic.datasource.spring.boot.autoconfigure.DynamicDataSourcePoolMetricsAutoConfiguration;
 import mybatis.mate.autoconfigure.MpmAutoConfiguration;
@@ -63,9 +61,7 @@ import org.springframework.context.annotation.FilterType;
 @ConfigurationPropertiesScan(basePackageClasses = {
         AiProperties.class,
         AiAgentClientProperties.class,
-        NacosAiAgentRegistryProperties.class,
-        CommonAliyunProperties.class,
-        CommonWechatProperties.class
+        NacosAiAgentRegistryProperties.class
 })
 @MapperScan(value = "com.kellen", annotationClass = Mapper.class)
 public class TestAiApplication {

@@ -8,8 +8,6 @@ import com.kellen.auth.AiRequestIdentity;
 import com.kellen.config.mybatis.MyMetaObjectHandler;
 import com.kellen.conversation.AiChatRequest;
 import com.kellen.conversation.AiDialogueService;
-import com.kellen.conversation.ChatConversationMessageService;
-import com.kellen.conversation.ChatConversationService;
 import com.kellen.file.MediaInputValidator;
 import com.kellen.memory.DbChatMemoryService;
 import com.kellen.memory.PatientMemoryService;
@@ -132,7 +130,7 @@ class ChatAuditTenantPersistenceTest {
                     any(), any(), any(), any(), any(), any(), any())).thenReturn(output.publishOn(worker));
             TenantContextHolder.setTenantId("untrusted-entry");
             TenantContextHolder.ignore();
-            Flux<String> stream = dialogue.stream(request, null, identity);
+            Flux<String> stream = dialogue.stream(request, identity);
             switch (terminal) {
                 case SUCCESS -> assertThat(stream.collectList().block(Duration.ofSeconds(2)))
                         .containsExactly("synthetic-answer");
@@ -229,8 +227,6 @@ class ChatAuditTenantPersistenceTest {
                     new AiRolePromptService.ResolvedPrompt("patient-analysis", "fixture", "synthetic-prompt"));
             return prompt;
         }
-        @Bean ChatConversationService conversations() { return mock(ChatConversationService.class); }
-        @Bean ChatConversationMessageService messages() { return mock(ChatConversationMessageService.class); }
         @Bean AiModelCallObserver observer() { return mock(AiModelCallObserver.class); }
     }
 }

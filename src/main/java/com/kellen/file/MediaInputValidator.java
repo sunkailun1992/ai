@@ -218,7 +218,7 @@ public class MediaInputValidator {
      * 读取远程二进制附件为内存资源。
      *
      * <p>Spring AI 交给模型时使用字节内容，而不是让模型服务自行访问 URL。
-     * 这样小程序本地调试地址、后端 token URL、OSS 302 短签名 URL 都可以稳定用于多模态输入。</p>
+     * 这样本地调试地址、后端 token URL、对象存储 302 短签名 URL 都可以用于多模态输入。</p>
      *
      * @param uri      已校验远程 URL。
      * @param mimeType 已校验 MIME 类型。

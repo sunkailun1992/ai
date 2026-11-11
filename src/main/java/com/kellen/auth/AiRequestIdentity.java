@@ -21,7 +21,7 @@ public final class AiRequestIdentity {
     public String accessToken() { return accessToken; }
     @Override public String toString() { return "AiRequestIdentity[verified]"; }
 
-    /** User 与微信身份不共用会话键；请求不能猜出另一个 User 的记忆命名空间。 */
+    /** 按已验证的租户与 User 身份隔离会话键；请求不能猜出另一身份的记忆命名空间。 */
     public String conversationKey(String requested) {
         String id = requested == null || requested.isBlank() ? "default" : requested.trim();
         if (id.length() > 256) throw new IllegalArgumentException("conversationId too long");

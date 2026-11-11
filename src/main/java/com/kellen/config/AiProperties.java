@@ -13,14 +13,10 @@ import java.util.List;
  * Nacos AI Registry 发现的 {@code ai-agent} 完成。</p>
  *
  * @param dialogue      对话业务配置段（默认角色、多模态限制、记忆窗口）。
- * @param wechat        微信小程序登录配置段。
- * @param oss           私有 OSS 文件上传和令牌展示配置段。
  */
 @ConfigurationProperties(prefix = "ai")
 public record AiProperties(
-        @DefaultValue DialogueProperties dialogue,
-        @DefaultValue WechatProperties wechat,
-        @DefaultValue OssProperties oss
+        @DefaultValue DialogueProperties dialogue
 ) {
 
     /**
@@ -59,41 +55,4 @@ public record AiProperties(
     ) {
     }
 
-    /**
-     * 微信小程序登录配置。
-     *
-     * @param appId        当前微信小程序 appId。
-     * @param appSecret    当前微信小程序 appSecret，未配置时登录接口会明确失败。
-     * @param tokenTtlDays 登录 token 有效天数。
-     */
-    public record WechatProperties(
-            @DefaultValue("") String appId,
-            @DefaultValue("") String appSecret,
-            @DefaultValue("30") long tokenTtlDays
-    ) {
-    }
-
-    /**
-     * 私有 OSS 文件配置。
-     *
-     * @param endpoint            OSS 外网 endpoint，例如 oss-cn-hangzhou.aliyuncs.com。
-     * @param bucket              OSS bucket 名称，必须为私有或受控读权限。
-     * @param accessKeyId         OSS AccessKeyId，仅后端保存。
-     * @param accessKeySecret     OSS AccessKeySecret，仅后端保存。
-     * @param baseDir             AI 小程序文件统一根目录。
-     * @param uploadExpireSeconds 前端直传策略有效期秒数。
-     * @param viewExpireSeconds   后端签名展示 URL 有效期秒数。
-     * @param maxUploadBytes      单文件最大上传字节数。
-     */
-    public record OssProperties(
-            @DefaultValue("") String endpoint,
-            @DefaultValue("") String bucket,
-            @DefaultValue("") String accessKeyId,
-            @DefaultValue("") String accessKeySecret,
-            @DefaultValue("ai-miniapp") String baseDir,
-            @DefaultValue("60") long uploadExpireSeconds,
-            @DefaultValue("1800") long viewExpireSeconds,
-            @DefaultValue("52428800") long maxUploadBytes
-    ) {
-    }
 }

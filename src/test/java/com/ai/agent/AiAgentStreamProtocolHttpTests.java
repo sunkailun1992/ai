@@ -8,8 +8,6 @@ import com.kellen.audit.ChatAuditService;
 import com.kellen.auth.AiRequestIdentity;
 import com.kellen.conversation.AiChatRequest;
 import com.kellen.conversation.AiDialogueService;
-import com.kellen.conversation.ChatConversationMessageService;
-import com.kellen.conversation.ChatConversationService;
 import com.kellen.file.MediaInputValidator;
 import com.kellen.memory.DbChatMemoryService;
 import com.kellen.memory.PatientMemoryService;
@@ -189,7 +187,6 @@ class AiAgentStreamProtocolHttpTests {
         var media = mock(MediaInputValidator.class);
         var prompt = mock(AiRolePromptService.class);
         var audit = mock(ChatAuditService.class);
-        var history = mock(ChatConversationMessageService.class);
         when(memory.shortMemoryContext(any())).thenReturn("");
         when(patient.patientContext(any(), any())).thenReturn("");
         when(media.validateUrlMedia(any())).thenReturn(List.of());
@@ -199,12 +196,11 @@ class AiAgentStreamProtocolHttpTests {
         var metrics = new SimpleMeterRegistry();
         try {
             var dialogue = new AiDialogueService(memory, media, audit, prompt,
-                    mock(ChatConversationService.class), history,
                     patient,
                     new AiModelCallObserver(metrics), client, mock(RagRetrievalClient.class));
 
             Flux<String> output = dialogue.stream(new AiChatRequest("fixture", "synthetic-question", null),
-                            null, new AiRequestIdentity("synthetic-user", "synthetic-tenant", "synthetic-token"));
+                            new AiRequestIdentity("synthetic-user", "synthetic-tenant", "synthetic-token"));
 
             assertThatThrownBy(() -> output.collectList().block(Duration.ofSeconds(5)))
                     .isInstanceOf(IllegalStateException.class);
@@ -213,7 +209,6 @@ class AiAgentStreamProtocolHttpTests {
             assertThat(metrics.find("ai.model.call.count").tag("outcome", "success").counter()).isNull();
             verify(audit, never()).recordSuccess(any(), any(), any(), any(), any(), any(), any(), any());
             verify(memory, never()).addMessage(any(), eq("assistant"), any());
-            verify(history, never()).recordAssistantMessage(any(), any(), any());
         } finally {
             metrics.close();
         }

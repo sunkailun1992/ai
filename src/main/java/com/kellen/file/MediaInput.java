@@ -5,7 +5,7 @@ package com.kellen.file;
  *
  * @param url          远程媒体地址；当前只允许 http/https 协议，由 MediaInputValidator 校验。
  * @param mimeType     媒体 MIME 类型，例如 image/png、image/jpeg，必填。
- * @param fileId       业务文件 ID，可选；小程序上传文件后用于历史展示时刷新 token。
+ * @param fileId       既有业务文件 ID，可选；当前对话入口不负责登记文件或刷新展示 token。
  * @param fileType     文件业务类型，可选；image/video/audio/file。
  * @param originalName 原始文件名，可选；用于历史消息展示。
  */

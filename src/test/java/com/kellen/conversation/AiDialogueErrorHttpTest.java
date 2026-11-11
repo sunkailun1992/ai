@@ -5,7 +5,6 @@ import com.kellen.agent.AiAgentRegistryClient;
 import com.kellen.agent.AiModelSelectionService;
 import com.kellen.audit.ChatAuditService;
 import com.kellen.auth.AiRequestIdentityResolver;
-import com.kellen.auth.WechatAuthService;
 import com.kellen.config.AiAgentClientProperties;
 import com.kellen.file.MediaInputValidator;
 import com.kellen.memory.DbChatMemoryService;
@@ -62,12 +61,11 @@ class AiDialogueErrorHttpTest {
     @Autowired SimpleMeterRegistry metrics;
     @Autowired DbChatMemoryService memory;
     @Autowired ChatAuditService audit;
-    @Autowired ChatConversationMessageService history;
     private HttpServer agent;
 
     @BeforeEach void startAgent() throws Exception {
         metrics.clear();
-        clearInvocations(memory, audit, history);
+        clearInvocations(memory, audit);
         upstream.protocol = "typed-sse-v1";
         upstream.body = "event:error\ndata:synthetic-private-provider-error\n\n";
         agent = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -115,7 +113,6 @@ class AiDialogueErrorHttpTest {
         verify(audit).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
         verify(audit, never()).recordSuccess(any(), any(), any(), any(), any(), any(), any(), any());
         verify(memory, never()).addMessage(any(), eq("assistant"), any());
-        verify(history, never()).recordAssistantMessage(any(), any(), any());
     }
 
     private HttpResponse<String> chat() throws Exception {
@@ -140,7 +137,6 @@ class AiDialogueErrorHttpTest {
             when(memory.shortMemoryContext(any())).thenReturn(""); return memory;
         }
         @Bean ChatAuditService audit() { return mock(ChatAuditService.class); }
-        @Bean ChatConversationMessageService history() { return mock(ChatConversationMessageService.class); }
         @Bean AiAgentClient client(Upstream upstream) {
             AiAgentRegistryClient registry = operation -> Optional.of(
                     new AiAgentRegistryClient.AgentEndpoint(upstream.url, "http", "fixture"));
@@ -148,7 +144,7 @@ class AiDialogueErrorHttpTest {
                     registry, mock(AiModelSelectionService.class));
         }
         @Bean AiDialogueService dialogue(DbChatMemoryService memory, ChatAuditService audit,
-                                        ChatConversationMessageService history, AiAgentClient client,
+                                        AiAgentClient client,
                                         SimpleMeterRegistry metrics) {
             var patient = mock(PatientMemoryService.class);
             when(patient.patientContext(any(), any())).thenReturn("");
@@ -157,7 +153,7 @@ class AiDialogueErrorHttpTest {
             var prompt = mock(AiRolePromptService.class);
             when(prompt.resolve(any(), any())).thenReturn(
                     new AiRolePromptService.ResolvedPrompt("patient-analysis", "fixture", "synthetic"));
-            return new AiDialogueService(memory, media, audit, prompt, mock(ChatConversationService.class), history,
+            return new AiDialogueService(memory, media, audit, prompt,
                     patient, new AiModelCallObserver(metrics),
                     client, mock(RagRetrievalClient.class));
         }
@@ -168,7 +164,7 @@ class AiDialogueErrorHttpTest {
             });
         }
         @Bean AiDialogueController controller(AiDialogueService dialogue, AiRequestIdentityResolver identities) {
-            return new AiDialogueController(dialogue, mock(WechatAuthService.class), mock(ChatConversationService.class), identities);
+            return new AiDialogueController(dialogue, identities);
         }
     }
 }

@@ -37,8 +37,6 @@ public class AiDialogueService {
     private final MediaInputValidator mediaInputValidator;
     private final ChatAuditService chatAuditService;
     private final AiRolePromptService aiRolePromptService;
-    private final ChatConversationService chatConversationService;
-    private final ChatConversationMessageService chatConversationMessageService;
     private final PatientMemoryService patientMemoryService;
     private final AiModelCallObserver modelCallObserver;
     private final AiAgentClient aiAgentClient;
@@ -51,8 +49,6 @@ public class AiDialogueService {
      * @param mediaInputValidator            多模态媒体校验器。
      * @param chatAuditService               对话审计服务。
      * @param aiRolePromptService            角色提示词解析服务。
-     * @param chatConversationService        会话元数据服务。
-     * @param chatConversationMessageService 展示消息服务。
      * @param patientMemoryService           患者长期记忆服务。
      * @param modelCallObserver              模型调用观测服务。
      * @param aiAgentClient                  Agent 执行服务客户端。
@@ -62,8 +58,6 @@ public class AiDialogueService {
                              MediaInputValidator mediaInputValidator,
                              ChatAuditService chatAuditService,
                              AiRolePromptService aiRolePromptService,
-                             ChatConversationService chatConversationService,
-                             ChatConversationMessageService chatConversationMessageService,
                              PatientMemoryService patientMemoryService,
                              AiModelCallObserver modelCallObserver,
                              AiAgentClient aiAgentClient,
@@ -72,8 +66,6 @@ public class AiDialogueService {
         this.mediaInputValidator = mediaInputValidator;
         this.chatAuditService = chatAuditService;
         this.aiRolePromptService = aiRolePromptService;
-        this.chatConversationService = chatConversationService;
-        this.chatConversationMessageService = chatConversationMessageService;
         this.patientMemoryService = patientMemoryService;
         this.modelCallObserver = modelCallObserver;
         this.aiAgentClient = aiAgentClient;
@@ -90,29 +82,8 @@ public class AiDialogueService {
                 "model execution is delegated to ai-agent through Nacos AI Registry");
     }
 
-    /**
-     * 发起 SSE 流式对话，支持纯文本和远程媒体 URL。
-     *
-     * @param request 流式对话请求，message 必填，attachments 可选。
-     * @return Agent 逐段输出的 Flux。
-     */
-    public Flux<String> stream(AiChatRequest request) {
-        return stream(request, null);
-    }
-
-    /**
-     * 发起 SSE 流式对话，并在登录用户场景维护会话列表。
-     *
-     * @param request     流式对话请求。
-     * @param ownerUserId 当前微信用户 ID，可空。
-     * @return Agent 逐段输出的 Flux。
-     */
-    public Flux<String> stream(AiChatRequest request, Long ownerUserId) {
-        return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
-    }
-
-    /** 已认证 User 身份作为不可变值进入异步链；微信 owner 不由 User ID 推定。 */
-    public Flux<String> stream(AiChatRequest request, Long ownerUserId, AiRequestIdentity identity) {
+    /** 已认证 User 身份作为不可变值进入异步链。 */
+    public Flux<String> stream(AiChatRequest request, AiRequestIdentity identity) {
         if (identity == null) return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
         Context entryParent = Context.current();
         return Flux.defer(() -> {
@@ -122,9 +93,8 @@ public class AiDialogueService {
             try (Scope ignored = observation.span.makeCurrent(); var tenant = identity.bindTenant()) {
                 List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
                 String normalizedConversationId = identity.conversationKey(request.conversationId());
-                chatConversationService.touchOnUserMessage(ownerUserId, normalizedConversationId, request.message());
                 execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
-                        media, "chat_stream", ownerUserId, normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation, identity);
+                        media, "chat_stream", normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation, identity);
             } catch (RuntimeException error) {
                 observation.failed();
                 observation.finish(reactor.core.publisher.SignalType.ON_ERROR);
@@ -148,10 +118,9 @@ public class AiDialogueService {
      * @param role                     请求角色 key。
      * @param rawMessage               原始用户消息。
      * @param instruction              本轮补充要求。
-     * @param rawAttachments           原始附件输入，用于小程序历史展示和传给 Agent。
+     * @param rawAttachments           原始附件输入，用于传给 Agent。
      * @param media                    已通过安全校验的媒体资源摘要。
      * @param messageType              审计中的调用类型。
-     * @param ownerUserId              当前微信用户 ID，可空。
      * @param normalizedConversationId 归一化会话 ID。
      * @param patientId                患者 ID，用于检索长期记忆。
      * @param sourceTenantId           来源业务租户 ID。
@@ -164,7 +133,6 @@ public class AiDialogueService {
                                         List<MediaInput> rawAttachments,
                                         List<MediaInputValidator.ValidatedMedia> media,
                                         String messageType,
-                                        Long ownerUserId,
                                         String normalizedConversationId,
                                         String patientId,
                                         String sourceTenantId,
@@ -180,7 +148,6 @@ public class AiDialogueService {
         StringBuilder content = new StringBuilder();
 
         dbChatMemoryService.addMessage(normalizedConversationId, "user", message);
-        chatConversationMessageService.recordUserMessage(ownerUserId, normalizedConversationId, message, rawAttachments);
 
         return aiAgentClient.patientAnalysisStream(
                         normalizedConversationId,
@@ -204,7 +171,6 @@ public class AiDialogueService {
                     chatAuditService.recordSuccess(identity, normalizedConversationId, messageType, PATIENT_ANALYSIS_AGENT,
                             message, resolvedPrompt.systemPrompt(), assistantContent, mediaSummary);
                     dbChatMemoryService.addMessage(normalizedConversationId, "assistant", assistantContent);
-                    chatConversationMessageService.recordAssistantMessage(ownerUserId, normalizedConversationId, assistantContent);
                 }))
                 .doOnError(exception -> observation.run(() -> {
                     observation.failed();

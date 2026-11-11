@@ -1,153 +1,54 @@
 package com.ai.file;
 
-import com.kellen.auth.AiWechatUserEntity;
-import com.kellen.config.AiProperties;
-
-import com.kellen.config.aliyun.CommonAliyunProperties;
+import com.kellen.aliyun.oss.token.OssTokenUtils;
+import com.kellen.file.AiFileObjectEntity;
 import com.kellen.file.AiFileObjectRepository;
 import com.kellen.file.OssFileService;
-import com.kellen.file.FileUploadCompleteRequest;
-import com.kellen.file.AiFileObjectEntity;
-import com.kellen.storage.PrivateObjectStorageService;
-import com.kellen.aliyun.oss.token.OssUploadPolicy;
-import org.mockito.ArgumentCaptor;
-import java.util.Map;
-import java.net.URI;
-import org.springframework.test.util.ReflectionTestUtils;
+import com.kellen.storageconfig.ManagedPrivateStorage;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import java.net.URI;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
-/**
- * OSS 文件服务测试。
- *
- * <p>覆盖配置安全边界：未配置 bucket 或密钥时，后端不能签发直传策略，
- * 也不能写入文件元数据。</p>
- */
+/** 退役上传后仍保留既有文件的 token 校验及固定 DB 平台读取。 */
 class OssFileServiceTests {
-
-    /**
-     * 验证 OSS 配置缺失时无法生成上传策略。
-     */
-    @Test
-    void uploadPolicyRequiresOssCredentials() {
-        AiFileObjectRepository repository = mock(AiFileObjectRepository.class);
-        OssFileService service = new OssFileService(testProperties(), emptyCommonAliyunProperties(), repository);
-
-        AiWechatUserEntity user = AiWechatUserEntity.create("fixture-openid", "");
-        ReflectionTestUtils.setField(user, "id", 7L);
-        assertThrows(IllegalStateException.class,
-                () -> service.createUploadPolicy(user, "image", "image/png", "fixture.png"));
-        verifyNoInteractions(repository);
-    }
-
-    @Test
-    void unifiedStorageUploadsWithoutLegacyCredentialsAndPersistsThePlatform() {
-        AiFileObjectRepository repository = mock(AiFileObjectRepository.class);
-        PrivateObjectStorageService storage = mock(PrivateObjectStorageService.class);
-        when(storage.selected()).thenReturn(true);
-        when(storage.platform()).thenReturn("minio-private");
-        String key = "ai-miniapp/wechat-user-7/image/fixture.png";
-        Map<String, String> fields = Map.of("key", key, "x-amz-signature", "fixture-signature");
-        when(storage.createUploadPolicy(anyString(), anyString(), anyString(), anyString(), anyString(),
-                anyLong(), anyLong(), anyLong())).thenReturn(new OssUploadPolicy("id", "policy", "sig",
-                        "https://files.example.invalid/private", "123", key, "image", "image/png", 52428800, null, fields));
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        OssFileService service = new OssFileService(testProperties(), emptyCommonAliyunProperties(), repository, storage);
-        AiWechatUserEntity user = AiWechatUserEntity.create("fixture-openid", "");
-        ReflectionTestUtils.setField(user, "id", 7L);
-
-        var policy = service.createUploadPolicy(user, "image", "image/png", "fixture.png");
-        assertThat(policy.formFields()).isEqualTo(fields);
-        assertThat(policy.storagePlatform()).isEqualTo("minio-private");
-        var completed = service.completeUpload(user, new FileUploadCompleteRequest(key, "fixture.png",
-                "image/png", "image", 12L, policy.storagePlatform()));
-        assertThat(completed.entity().getStoragePlatform()).isEqualTo("minio-private");
-        verify(storage).validateObjectOwner("ai-miniapp", "wechat-user-7", key);
-        verify(storage).verifyObjectExists("minio-private", key);
-        assertThat(completed.entity().getDisplayTokenHash()).isNotEqualTo(completed.displayToken());
-    }
-
-    @Test
-    void selectedButMisconfiguredStorageCannotFallBackToLegacyOss() {
-        PrivateObjectStorageService storage = mock(PrivateObjectStorageService.class);
-        when(storage.selected()).thenReturn(true);
-        when(storage.configured()).thenReturn(false);
-        when(storage.createUploadPolicy(anyString(), anyString(), anyString(), anyString(), anyString(),
-                anyLong(), anyLong(), anyLong())).thenThrow(new IllegalStateException("selected-platform-unavailable"));
-        AiWechatUserEntity user = AiWechatUserEntity.create("fixture-openid", "");
-        ReflectionTestUtils.setField(user, "id", 7L);
-        OssFileService service = new OssFileService(testProperties(), emptyCommonAliyunProperties(),
-                mock(AiFileObjectRepository.class), storage);
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createUploadPolicy(user, "image",
-                "image/png", "fixture.png")).hasMessage("selected-platform-unavailable");
-        verify(storage).createUploadPolicy(eq("wechat-user-7"), eq("image"), eq("image/png"), eq("fixture.png"),
-                anyString(), anyLong(), anyLong(), anyLong());
-    }
-
-    @Test
-    void savedPlatformIsUsedForViewingAfterTheDefaultPlatformChanges() {
-        PrivateObjectStorageService storage = mock(PrivateObjectStorageService.class);
-        when(storage.platform()).thenReturn("replacement-platform");
-        AiFileObjectEntity file = AiFileObjectEntity.create(7L, "owner/image.png", "image.png", "image/png",
-                "image", 12L, "hash");
+    @Test void validTokenLoadsAnExistingFileAndSignsOnlyItsSavedPlatform() {
+        var repository = mock(AiFileObjectRepository.class);
+        var managed = mock(ManagedPrivateStorage.class);
+        var service = new OssFileService(repository, managed);
+        var file = AiFileObjectEntity.create(7L, "legacy-owner/image.png", "image.png", "image/png", "image",
+                12L, OssTokenUtils.displayTokenHash("synthetic-token"));
         file.setStoragePlatform("original-platform");
-        URI signed = URI.create("https://files.example.invalid/private/signed");
-        when(storage.signedViewUri("original-platform", "owner/image.png", 1800)).thenReturn(signed);
-        OssFileService service = new OssFileService(testProperties(), emptyCommonAliyunProperties(),
-                mock(AiFileObjectRepository.class), storage);
-        assertThat(service.signedViewUri(file)).isEqualTo(signed);
-        verify(storage).signedViewUri("original-platform", "owner/image.png", 1800);
+        when(repository.findByIdAndStatus(7L, AiFileObjectEntity.STATUS_ACTIVE)).thenReturn(Optional.of(file));
+        assertThat(service.viewableFile(7L, "synthetic-token")).isSameAs(file);
+        verifyNoInteractions(managed);
+        var expected = URI.create("https://files.example.invalid/private/signed");
+        when(managed.signedViewUri("original-platform", "legacy-owner/image.png")).thenReturn(expected);
+        assertThat(service.signedViewUri(file)).isEqualTo(expected);
+        verify(managed).signedViewUri("original-platform", "legacy-owner/image.png");
     }
 
-    @Test
-    void clientCannotRegisterAnObjectOnAnUnselectedStoragePlatform() {
-        PrivateObjectStorageService storage = mock(PrivateObjectStorageService.class);
-        when(storage.selected()).thenReturn(true);
-        when(storage.platform()).thenReturn("selected");
-        AiFileObjectRepository repository = mock(AiFileObjectRepository.class);
-        OssFileService service = new OssFileService(testProperties(), emptyCommonAliyunProperties(), repository, storage);
-        AiWechatUserEntity user = AiWechatUserEntity.create("fixture-openid", "");
-        ReflectionTestUtils.setField(user, "id", 7L);
-        assertThrows(IllegalArgumentException.class, () -> service.completeUpload(user,
-                new FileUploadCompleteRequest("ai-miniapp/wechat-user-7/image/fixture.png", "fixture.png",
-                        "image/png", "image", 12L, "other")));
-        verifyNoInteractions(repository);
-        verify(storage, never()).verifyObjectExists(anyString(), anyString());
+    @Test void invalidTokenNeverReachesTheStorageRegistry() {
+        var repository = mock(AiFileObjectRepository.class);
+        var managed = mock(ManagedPrivateStorage.class);
+        var file = AiFileObjectEntity.create(7L, "legacy-owner/image.png", "image.png", "image/png", "image",
+                12L, OssTokenUtils.displayTokenHash("synthetic-token"));
+        when(repository.findByIdAndStatus(7L, AiFileObjectEntity.STATUS_ACTIVE)).thenReturn(Optional.of(file));
+        assertThatThrownBy(() -> new OssFileService(repository, managed).viewableFile(7L, "wrong-token"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("文件展示 token 无效");
+        verifyNoInteractions(managed);
     }
 
-    @Test
-    void productionConstructorNeverFallsBackToLegacyStorageWhenDatabaseIsEmpty() {
-        var managed=mock(com.kellen.storageconfig.ManagedPrivateStorage.class);
-        when(managed.upload()).thenThrow(new com.kellen.storageconfig.StorageFailure("STORAGE_UNCONFIGURED",503));
-        var legacy=mock(PrivateObjectStorageService.class);when(legacy.selected()).thenReturn(true);
-        var repository=mock(AiFileObjectRepository.class);
-        var service=new OssFileService(testProperties(),emptyCommonAliyunProperties(),repository,legacy,managed);
-        var user=AiWechatUserEntity.create("fixture-openid","");ReflectionTestUtils.setField(user,"id",7L);
-        org.assertj.core.api.Assertions.assertThatThrownBy(()->service.createUploadPolicy(user,"image","image/png","fixture.png"))
-                .isInstanceOf(com.kellen.storageconfig.StorageFailure.class);
-        verifyNoInteractions(repository);verify(legacy,never()).createUploadPolicy(anyString(),anyString(),anyString(),anyString(),anyString(),anyLong(),anyLong(),anyLong());
-        var file=AiFileObjectEntity.create(7L,"old/file.png","file.png","image/png","image",5L,"hash");
-        when(managed.signedViewUri(null,"old/file.png")).thenReturn(URI.create("https://files.example.invalid/owned"));
-        assertThat(service.signedViewUri(file)).isEqualTo(URI.create("https://files.example.invalid/owned"));
-        verify(legacy,never()).signedViewUri(anyString(),anyString(),anyLong());
-    }
-
-    private static AiProperties testProperties() {
-        return new AiProperties(
-                new AiProperties.DialogueProperties("patient-analysis", "兜底患者分析提示词", 4, 20971520, List.of("http", "https"),
-                        List.of("image/*", "text/plain"), new AiProperties.MemoryProperties(20, 7)),
-                new AiProperties.WechatProperties("wx-test", "", 30),
-                new AiProperties.OssProperties("oss-cn-hangzhou.aliyuncs.com", "", "", "", "ai-miniapp", 60, 1800, 52428800));
-    }
-
-    private static CommonAliyunProperties emptyCommonAliyunProperties() {
-        return new CommonAliyunProperties("", "", new CommonAliyunProperties.OssProperties("", "", "ai-miniapp", 60, 1800, 52428800));
+    @Test void historicalNullPlatformDelegatesToTheFixedDatabaseMapping() {
+        var managed = mock(ManagedPrivateStorage.class);
+        var file = AiFileObjectEntity.create(7L, "legacy-owner/image.png", "image.png", "image/png", "image", 12L, "hash");
+        var expected = URI.create("https://files.example.invalid/private/mapped");
+        when(managed.signedViewUri(null, "legacy-owner/image.png")).thenReturn(expected);
+        assertThat(new OssFileService(mock(AiFileObjectRepository.class), managed).signedViewUri(file)).isEqualTo(expected);
+        verify(managed).signedViewUri(null, "legacy-owner/image.png");
     }
 }

@@ -38,7 +38,7 @@
 5. `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md`：确认 Provider、Service、Validator、Repository 等设计模式和禁止过度抽象规则。
 6. `docs/ai-coding/AI_ENGINEERING_GUARDRAILS.md`：确认风险分级、Definition of Done、必须验证项和回滚要求。
 7. `docs/ai-coding/BRANCHING_SPEC.md`：确认分支命名、短分支生命周期、release/hotfix、tag 和清理规则。
-8. `docs/ai-coding/ENVIRONMENT_CONFIG_SPEC.md`：确认环境、Nacos namespace、Java profile 和前端/小程序边界。
+8. `docs/ai-coding/ENVIRONMENT_CONFIG_SPEC.md`：确认环境、Nacos namespace、Java profile 和前端与服务端边界。
 9. `docs/ai-coding/VERSIONING_SPEC.md`：确认 `group = 'com'`、`version = '1.0.0'`、补丁递增和消费者同步规则。
 10. `docs/ai-coding/RPC_API_CODING_SPEC.md`：涉及 Dubbo RPC provider、consumer、接口或 DTO 时必须阅读。
 11. `docs/ai-coding/TESTING_SPEC.md`：确认业务模块 SpringBootTest、真实 HTTP 集成测试、测试库、模型 stub 和 AssertJ 边界。
@@ -53,20 +53,16 @@
 - 默认且当前唯一开放角色是 `patient-analysis` 患者分析助手；普通闲聊不作为产品能力保留。
 - 角色切换必须通过 `AiRolePromptService` 读取数据库表 `ai_role_prompt`，配置中心只保留默认角色 key 和极简兜底提示词。
 - 调用方 `instruction` 只能作为本轮补充要求，不能覆盖医疗安全边界；旧 `systemPrompt` 仅作为兼容字段处理。
-- 对话会话列表统一写入 `ai_chat_conversation`，用于小程序恢复历史、新建会话和切换会话；所有查询必须校验所属微信用户。
-- 小程序聊天历史展示写入 `ai_chat_conversation_message`，用于恢复文本和附件预览；图片、报告等附件不得塞进 `ai_chat_memory`。
+- 微信小程序、微信 opaque 登录和 owner 专属会话/展示消息/上传管理均已退役，不恢复兼容端点或把 User ID 转为旧微信 owner。普通 User SSE、记忆、审计、RAG 与附件校验继续维护。
 - 对话记忆统一通过 `DbChatMemoryService` 维护，模型上下文写入 `ai_chat_memory`，由 `MessageChatMemoryAdvisor` 自动回放。
 - 对话审计记录统一写入 `ai_chat_message`；成功、失败和取消均必须由本轮已验证 `AiRequestIdentity` 显式写入 `tenant_id`，不依赖全局租户插件、来源分区、ambient 上下文或数据库默认值。系统参数统一写入 `system_parameter`。
 - 角色 Prompt 统一写入 `ai_role_prompt`，新增角色不得把完整长 Prompt 固化到 YAML。
-- 微信小程序登录接口统一放在 `/api/auth`，用户写入 `ai_wechat_user`，登录态写入 `ai_wechat_session`；小程序端只能保存 Bearer token，不能保存 appSecret、openid 或 sessionKey。
-- 小程序文件上传采用后端签发 OSS PostObject 策略、小程序直传、后端完成登记的模式；业务侧只保存 `ai_file_object.object_key` 和展示 token 哈希，禁止把公共 OSS URL 作为业务文件地址保存或传给 AI。
+- 既有私有文件展示仅通过 `/api/v1/files/{fileId}/view?token=...`（或 `/api/files` 别名），先校验展示 token，再按已保存平台签名；不提供普通 User 直传登记或文件 owner 管理 API。
 - 文件展示和 AI 多模态附件 URL 必须使用后端令牌地址 `/api/v1/files/{fileId}/view?token=...`；后端校验 token 后再生成短时签名 OSS URL，HEAD 请求必须返回真实 Content-Type 供多模态校验器使用。
 - 新增或修改 MyBatis-Plus 实体时，必须同步新增或维护 `src/main/resources/db/postgresql/` 的 PostgreSQL 表、字段中文注释和 `src/test/resources/schema.sql`；历史 MySQL 脚本不回改，已执行的 PG 脚本追加增量，并补齐相应测试。字段含义要能直接支撑数据库查看和外部系统对接。
 - 新增业务表必须补齐公共治理字段；数据库列 `version` 只做乐观锁，Prompt、模板、协议等业务版本使用 `prompt_version`、`template_version`、`protocol_version` 等明确列名。
 - AI 服务全新或清空后的业务库首次启动前，必须先在目标业务库手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行 `db/postgresql/ai-schema.sql`；公共脚本包含 `ddl_history` 和 Seata AT `undo_log`，不能依赖应用首次启动自动创建基础表。
 - 多模态附件只能使用配置白名单协议，默认 `http` / `https`；文件、图片、PDF、JSON 材料必须先上传到业务文件服务或 OSS，再把可访问 URL 传入 `attachments`。
-- 重命名对话必须走后端接口并校验当前登录用户归属，不能只改小程序本地列表标题。
-- 删除对话必须校验当前登录用户归属；会话元数据软删除，列表不再展示，同时清理该 `conversationId` 的普通模型记忆和小程序展示消息，避免删除后继续影响上下文。
 - 新增模型 Provider、记忆策略、多模态校验、审计或响应结构时，必须优先沿用 `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md` 中的 Provider、Application Service、Strategy、Adapter、Validator、Repository 等既有模式。
 - 新增本服务对外 Controller、服务前缀，或新增后续独立 Agent 服务需要经网关访问时，必须同步评估 `../gateway` 的 Nacos `gateway-spring.yaml`；需要 Swagger UI 聚合的服务要先保证对应网关文档路径返回 200，再加入 `springdoc.swagger-ui.urls`。
 - 跨服务 Dubbo RPC 接口和 DTO 统一维护在同级 `../rpc-api`；`ai` 只实现或调用契约，不在本服务或 `utils` 复制接口定义。
@@ -105,5 +101,5 @@ bash scripts/check-secrets.sh
 - 禁止把 Provider 名称、模型名、URL 或密钥写死在业务代码里。
 - 禁止提交真实密钥、数据库密码、Webhook 或生产配置值；调整 Nacos 地址、namespace 或 group 必须能说明和当前微服务环境的对应关系。
 - 禁止把用户输入直接拼 SQL、文件路径、URL 目标或系统命令。
-- 禁止恢复公共 OSS 读链接模式；小程序和 AI 对话只允许使用后端 token 展示地址引用已登记文件。
+- 禁止恢复公共 OSS 读链接模式；AI 对话只允许使用后端 token 展示地址引用已登记文件。
 - 禁止提交 `.DS_Store`、本机绝对路径、临时日志和无关构建产物。
