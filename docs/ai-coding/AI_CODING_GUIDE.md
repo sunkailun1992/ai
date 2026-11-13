@@ -65,6 +65,8 @@
 
 ## 4. 分层规则
 
+以下是职责分层，不是包名；代码按功能分包（见 `AI_DIRECTORY_STRUCTURE_GUIDE.md`），同一功能包内按这些职责拆类。
+
 - `controller`：HTTP 入参出参，不直接拼 Prompt，不接触 Agent SDK 或模型 SDK。
 - `config`：类型安全配置绑定、DDL 初始化和 Nacos AI Registry 配置。
 - `service`：业务编排和单一职责组件。
@@ -100,7 +102,7 @@
 - 微信 owner 会话元数据/历史展示能力已退役；不重新注册旧实体、Repository 或会话管理路由。
 - `ai_chat_message` 是审计表，不是模型记忆表。
 
-## 8. 数据库规则
+## 7. 数据库规则
 
 - 当前表结构由 `PostgresqlDdl.java` 加载 `db/postgresql/common-infra-schema.sql` 与 `db/postgresql/ai-schema.sql`；历史 MySQL 脚本不在 PostgreSQL 执行。
 - 全新或清空后的业务库首次启动前，必须先在目标业务库手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行服务的 `db/postgresql/ai-schema.sql`；Seata AT 会在 `DataSource` 初始化时先检查 `undo_log`，不能依赖 MyBatis-Plus DDL 首次启动自动创建该表。
@@ -113,7 +115,7 @@
 - 数据库列 `version` 只表示乐观锁版本号；Prompt、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
 - 现有 AI 业务表保留 `bigint` 自增主键和 `created_at` / `updated_at` 运行时字段，后续新增通用后台管理型业务表再优先继承 `EntityBase`。
 
-## 9. 安全规则
+## 8. 安全规则
 
 - 多模态 URL 必须校验协议、数量、MIME 和远程 Content-Type。
 - 文件、图片、PDF、JSON 等资料必须先上传到文件服务或 OSS，再作为 `attachments.url` 传入。
@@ -127,7 +129,7 @@
 
 角色 Prompt 的正文、`prompt_version` 与来源从同一解析结果取得；数据库来源和配置兜底分别标识，未知版本不从正文推算。只写有限 `fleet.ai.prompt.*` 元数据，不将 Prompt 正文、业务会话 ID 或患者身份放入 trace。历史 DTO 的 `traceId` 是业务关联，不作为 OTel trace ID。真实模型 usage 与公开 reasoning 存在性由执行层 ai-agent 采集，主服务不伪造供应商数据。
 
-## 10. 验证
+## 9. 验证
 
 ```bash
 ./gradlew test --no-daemon

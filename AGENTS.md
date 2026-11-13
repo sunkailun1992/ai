@@ -17,6 +17,8 @@
 - 高风险变更必须有独立风险验证，不能只依赖实现者的唯一自证测试；Review 可按需补充，不增加已授权提交/合并/推送的人工批准门禁。纯文档运行差异、路径和凭据检查，不机械重跑 Java 测试。
 - 修改版本前读 `docs/ai-coding/VERSIONING_SPEC.md`：MINOR/PATCH 各为 0–9，`1.2.9 -> 1.3.0`、`1.9.9 -> 2.0.0`；先核远端、tag、在途分支和已发布制品占用，同批只升一次，纯规范不升业务版本，不覆盖旧 tag/同版制品。
 - Git 集成、CI、远端制品、部署和实际验收分别取证；当前任务已给出的授权持续有效，未覆盖的外部发布动作仍需明确授权。
+- 维护者本人，以及维护者本机用维护者账号运行的 Claude / Codex 会话，可以直接合并到 `main`：合并前本机验证命令全过，合并后看 CI，红了马上修。本仓库 push 目前不会自动触发 CI，推送 `main` 后手动执行 `gh workflow run CI --repo sunkailun1992/ai --ref main`，确认新 run 的 `headSha` 等于推送的提交再读结论。
+- 云端会话（`CLAUDE_CODE_REMOTE=true`，或会话里没有本机配置）只推会话分支，由维护者或本机会话合并。其他人的代码走 PR：CI 全绿、维护者审核批准、评审对话解决后再合并。代理不修改 ruleset 与仓库权限，除非用户当场明确要求。
 
 ## 项目定位
 
@@ -36,19 +38,22 @@
 3. `docs/ai-coding/AI_DIRECTORY_STRUCTURE_GUIDE.md`：确认 Java、Spring Boot、Spring AI、Gradle、测试和文档目录规则。
 4. `docs/ai-coding/AI_COMMENT_STYLE_GUIDE.md`：确认当前文件类型的注释规范、自解释优先、禁止注释掉死代码和排版要求。
 5. `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md`：确认 Provider、Service、Validator、Repository 等设计模式和禁止过度抽象规则。
-6. `docs/ai-coding/AI_ENGINEERING_GUARDRAILS.md`：确认风险分级、Definition of Done、必须验证项和回滚要求。
-7. `docs/ai-coding/BRANCHING_SPEC.md`：确认分支命名、短分支生命周期、release/hotfix、tag 和清理规则。
-8. `docs/ai-coding/ENVIRONMENT_CONFIG_SPEC.md`：确认环境、Nacos namespace、Java profile 和前端与服务端边界。
-9. `docs/ai-coding/VERSIONING_SPEC.md`：确认 `group = 'com'`、`version = '1.0.0'`、补丁递增和消费者同步规则。
-10. `docs/ai-coding/RPC_API_CODING_SPEC.md`：涉及 Dubbo RPC provider、consumer、接口或 DTO 时必须阅读。
-11. `docs/ai-coding/TESTING_SPEC.md`：确认业务模块 SpringBootTest、真实 HTTP 集成测试、测试库、模型 stub 和 AssertJ 边界。
-12. `docs/ai-coding/SECURITY_CODING_SPEC.md`：确认密钥、用户输入、多模态 URL、日志、数据库和模型调用安全规则。
-13. `docs/ai-coding/NACOS_CONFIG_SPEC.md`：修改 Nacos 配置中心、共享 dataId 或 `application.yml` import 前必读。
-14. 目标 Controller、Service、Repository、Entity、`application.yml` 和 Nacos 模板：确认真实调用链，不按文件名猜行为。
+6. `docs/ai-coding/AI_ENGINEERING_GUARDRAILS.md`：确认风险分级、Definition of Done、必须验证项、CI 门禁和回滚要求。
+7. `docs/ai-coding/AI_AUTOMATION_WORKFLOW.md`：需求较大、需要需求说明或验收标准时，按其流程和模板执行。
+8. `docs/ai-coding/BRANCHING_SPEC.md`：确认分支命名、短分支生命周期、release/hotfix、tag 和清理规则。
+9. `docs/ai-coding/ENVIRONMENT_CONFIG_SPEC.md`：确认环境、Nacos namespace、Java profile 和前端与服务端边界。
+10. `docs/ai-coding/VERSIONING_SPEC.md`：确认 `group = 'com'`、`version = '1.0.0'`、补丁递增和消费者同步规则。
+11. `docs/ai-coding/RPC_API_CODING_SPEC.md`：涉及 Dubbo RPC provider、consumer、接口或 DTO 时必须阅读。
+12. `docs/ai-coding/TESTING_SPEC.md`：确认业务模块 SpringBootTest、真实 HTTP 集成测试、测试库、模型 stub、AssertJ 边界和测试稳定性。
+13. `docs/ai-coding/PROJECT_CODING_SPEC.md`：确认通用微服务规则在 `ai` 的适用范围；与本文件冲突时以本文件为准。
+14. `docs/ai-coding/SECURITY_CODING_SPEC.md`：确认密钥、用户输入、多模态 URL、日志、数据库和模型调用安全规则。
+15. `docs/ai-coding/UTILS_PUBLIC_SPEC.md`：涉及错误码、数据库、乐观锁或 `utils` 公共能力时阅读。
+16. `docs/ai-coding/NACOS_CONFIG_SPEC.md`：修改 Nacos 配置中心、共享 dataId 或 `application.yml` import 前必读。
+17. 目标 Controller、Service、Repository、Entity、`application.yml` 和 Nacos 模板：确认真实调用链，不按文件名猜行为。
 
 ## 项目边界
 
-- 模型选择必须通过 `AiChatClientProvider`，业务代码不得直接绑定某个模型供应商。
+- 模型选择必须通过 `ai-agent` 的 `AiChatClientProvider`（模型执行已在 `ai-agent`，`ai` 只经 `AiModelSelectionService` 维护默认 Provider），业务代码不得直接绑定某个模型供应商。
 - 运行时模型切换通过 `ai_model_selection` 控制，允许值当前为 `google` / `deepseek` / `qwen`。
 - 默认且当前唯一开放角色是 `patient-analysis` 患者分析助手；普通闲聊不作为产品能力保留。
 - 角色切换必须通过 `AiRolePromptService` 读取数据库表 `ai_role_prompt`，配置中心只保留默认角色 key 和极简兜底提示词。
@@ -77,7 +82,8 @@
 - 模型 Provider、Prompt、对话记忆、多模态、数据库、生产配置和安全边界相关改动默认中高风险。
 - AI 不能为了让编译或测试通过而绕过 Provider 白名单、媒体 URL 协议限制、附件 MIME 校验、记忆窗口限制、数据库记录或异常脱敏。
 - 测试分层按 `docs/ai-coding/TESTING_SPEC.md` 执行；核心业务不能只靠 mock 或纯对象 `assertThat`，必须补 Spring Boot 级别测试。
-- 修改模型调用时，必须保证同一轮请求使用同一个 `CurrentClient` 完成调用、响应和落库。
+- 测试必须稳定可重复，按 `TESTING_SPEC.md`「测试稳定性」：不依赖时序、连接复用或执行顺序；偶发失败按缺陷处理，不用重试、跳过或删除测试掩盖。
+- 修改模型调用时，必须保证同一轮请求使用同一个 `CurrentClient` 完成调用、响应和落库（`CurrentClient` 在 `ai-agent`，跨服务改动同步核对）。
 - 修改对话记忆或会话切换时，必须保留条数上限、时间窗口和用户归属校验，且不得混淆 `ai_chat_conversation` 会话元数据、`ai_chat_memory` 模型记忆表与 `ai_chat_message` 审计表。
 - 修改 Prompt 或角色时，必须保留“不能替代医生诊断、治疗、用药或急救判断”的安全边界。
 
@@ -92,7 +98,7 @@
 bash scripts/check-secrets.sh
 ```
 
-涉及 `rpc-api` 契约、数据库实体、Repository、Provider 切换、Prompt 或多模态 URL 时，必须执行完整构建或说明不能执行的原因。
+涉及 `rpc-api` 契约、数据库实体、Repository、Provider 切换、Prompt 或多模态 URL 时，必须执行完整构建或说明不能执行的原因。CI 依次执行编译、测试与密钥扫描；推送 `main` 后按上方合并规则核对精确提交的 CI。
 
 ## 禁止事项
 

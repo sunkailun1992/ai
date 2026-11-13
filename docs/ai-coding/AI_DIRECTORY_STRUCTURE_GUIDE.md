@@ -25,32 +25,40 @@
 └── .github/
 ```
 
-生产代码根包：
+生产代码根包（主应用类 `AiApplication`）：
 
 ```text
-src/main/java/com/ai
+src/main/java/com/kellen
 ```
 
-当前服务目录职责：
+代码按功能分包，同一功能的 Controller、Service、Repository、Entity 与请求/响应对象放在同一个包里。当前功能包职责：
 
-| 目录 | 职责 |
+| 包 | 职责 |
 | --- | --- |
-| `config` | `ai.*` 类型安全配置绑定、DDL 初始化和 Nacos AI Registry 配置。 |
-| `controller` | User AI 对话、记忆、通用文件展示和配置管理 HTTP 入口。 |
-| `dto` | 对话、多模态、文件和记忆接口 DTO。 |
-| `entity` | 业务表 MyBatis-Plus 实体。 |
+| `agent` | 按 Nacos AI Registry 调用 `ai-agent`（`AiAgentClient`、注册中心客户端、请求签名）与运行时模型选择。 |
+| `audit` | 对话审计 `ai_chat_message` 落库。 |
+| `auth` | 请求身份解析与租户上下文（`AiRequestIdentity`）。 |
+| `config` | `ai.*` 类型安全配置绑定与 PostgreSQL DDL 初始化（`PostgresqlDdl`）。 |
+| `controlplane` | 平台控制面管理员校验。 |
+| `conversation` | 对话入口与编排（`AiDialogueController`、`AiDialogueService`）及其请求/响应对象。 |
 | `exception` | 统一异常响应。 |
-| `repository` | MyBatis-Plus Mapper Repository。 |
-| `service` | 主业务编排、Agent 调用、角色 Prompt、记忆、审计、多模态校验和文件服务。 |
+| `file` | 私有文件展示、OSS 签名与多模态附件校验。 |
+| `memory` | 对话记忆、记忆摘要与患者记忆。 |
+| `modelcontrolplane` | LiteLLM 只读模型目录与历史实测结果投影。 |
+| `observability` | 模型调用观测。 |
+| `prompt` | 角色 Prompt 解析与默认提示词初始化。 |
+| `rag` | 通过 Dubbo 调用独立 `rag` 服务获取检索上下文。 |
+| `repository` | MyBatis-Plus 基础接口 `AiBaseRepository` 与现有 AI 业务实体的公共字段基类 `AiGovernanceEntity`。 |
+| `storageconfig` | 统一存储控制面：存储配置、加密凭据、全局默认与操作记录。 |
 
 ## 目录规则
 
 - 新增模型执行能力优先放到 `ai-agent` 或新的独立 Agent 服务，不在主 `ai` 服务新增厂商 SDK 目录。
 - 新增 Agent 消费逻辑放在 `AiAgentClient` 或 Nacos Registry 相关服务，不在 Controller 直接调用外部 Agent。
-- 新增接口 DTO 放 `dto`，新增数据库表放 `entity` + `repository`，新增业务编排放 `service`。
-- 新增多模态、Prompt、安全校验、审计或记忆策略时优先复用现有 service 子职责，不新增 `helper`、`manager`、`common` 等低信息目录。
-- 新增测试放 `src/test/java/com/ai`，测试配置和 Mock 数据放 `src/test/resources`。
-- `src/main/resources/db/` 放运行时 MySQL DDL；`src/test/resources/schema.sql` 放 H2 测试库 DDL。
+- 新增能力放进对应功能包；确属新功能时新建 `com.kellen.<功能>` 包，把该功能的 Controller、Service、Repository、Entity 与请求/响应对象放在一起，不另建按层划分的平行目录。
+- 新增多模态、Prompt、安全校验、审计或记忆策略时优先复用现有功能包里的组件，不新增 `helper`、`manager`、`common` 等低信息目录。
+- 新增测试放 `src/test/java`，包名与被测类一致（主代码均在 `com.kellen.*`）；`src/test/java/com/ai` 下是早期测试，可原地维护。测试配置和 Mock 数据放 `src/test/resources`。
+- `src/main/resources/db/postgresql/` 放运行时 PostgreSQL 全量与增量脚本；`src/main/resources/db/` 根下的 `ai-init.sql` 等是历史 MySQL 脚本，不回改；`src/test/resources/schema.sql` 放 H2 测试库 DDL。
 - Nacos 真实配置只维护在配置中心，不恢复 `docs/nacos` 本地模板目录。
 - 构建产物、日志、IDE 文件、本机模块文件和系统文件不得提交。
 

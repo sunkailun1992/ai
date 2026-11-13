@@ -17,13 +17,17 @@
 5. `AI_COMMENT_STYLE_GUIDE.md`
 6. `AI_DESIGN_PATTERN_GUIDE.md`
 7. `AI_ENGINEERING_GUARDRAILS.md`
-8. `BRANCHING_SPEC.md`
-9. `ENVIRONMENT_CONFIG_SPEC.md`
-10. `VERSIONING_SPEC.md`
-11. `RPC_API_CODING_SPEC.md`
-12. `TESTING_SPEC.md`
-13. `SECURITY_CODING_SPEC.md`
-14. 目标 Controller、Service、Repository、Entity、DTO、配置或测试
+8. `AI_AUTOMATION_WORKFLOW.md`
+9. `BRANCHING_SPEC.md`
+10. `ENVIRONMENT_CONFIG_SPEC.md`
+11. `VERSIONING_SPEC.md`
+12. `RPC_API_CODING_SPEC.md`
+13. `TESTING_SPEC.md`
+14. `PROJECT_CODING_SPEC.md`
+15. `SECURITY_CODING_SPEC.md`
+16. `UTILS_PUBLIC_SPEC.md`
+17. `NACOS_CONFIG_SPEC.md`（修改 Nacos 配置时）
+18. 目标 Controller、Service、Repository、Entity、DTO、配置或测试
 
 ## 目录结构
 
@@ -35,12 +39,17 @@ docs/ai-coding/
   AI_COMMENT_STYLE_GUIDE.md
   AI_DESIGN_PATTERN_GUIDE.md
   AI_ENGINEERING_GUARDRAILS.md
+  AI_AUTOMATION_WORKFLOW.md
   BRANCHING_SPEC.md
   ENVIRONMENT_CONFIG_SPEC.md
   VERSIONING_SPEC.md
   RPC_API_CODING_SPEC.md
   TESTING_SPEC.md
+  PROJECT_CODING_SPEC.md
   SECURITY_CODING_SPEC.md
+  UTILS_PUBLIC_SPEC.md
+  NACOS_CONFIG_SPEC.md
+  NACOS_COMMENT_SPEC.md
   archive/
   examples/
 ```
@@ -58,5 +67,7 @@ docs/ai-coding/
 - 项目版本、公共包依赖和后端 Java 新项目基础坐标按 `VERSIONING_SPEC.md` 处理；纯 AI 规范或 README 改动不提升制品版本。
 - Dubbo RPC 契约统一维护在同级 `../rpc-api`；`ai` 通过契约调用或发布稳定能力，不在服务内复制接口/DTO。
 - 测试按 `TESTING_SPEC.md` 分层；核心接口用真实 Spring Boot HTTP 集成测试，核心 Service 用真实 Spring Bean 测试，模型/OSS 等外部依赖默认 stub。
+- 测试必须稳定可重复（`TESTING_SPEC.md`「测试稳定性」）；推送 `main` 后核对精确提交的 CI，本仓库 push 目前需手动触发 CI（`AI_ENGINEERING_GUARDRAILS.md` Definition of Done）。
+- 通用微服务规则见 `PROJECT_CODING_SPEC.md`，`utils` 公共规则见 `UTILS_PUBLIC_SPEC.md`；两者与 `AGENTS.md` 冲突时以 `AGENTS.md` 为准。
 
-接口失败事件与配套升级见 [typed SSE 合同](docs/typed-sse-contract.md)。功能退役范围和数据清理边界见 [退役说明](docs/feature-retirement.md)。
+接口失败事件与配套升级见 [typed SSE 合同](../typed-sse-contract.md)。功能退役范围和数据清理边界见 [退役说明](../feature-retirement.md)。

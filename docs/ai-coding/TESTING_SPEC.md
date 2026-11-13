@@ -34,8 +34,23 @@
 - 测试数据可以落库，但必须可重复、可识别、可清理。
 - 测试前置数据必须由 SQL、fixture、builder 或测试接口显式准备，不依赖本机临时数据刚好存在。
 
+## 测试稳定性
+
+- 测试结果只能由输入决定，不依赖真实时间、线程调度、连接复用、端口、执行顺序或本机遗留状态。需要时间的逻辑注入 `Clock`；等待异步结果用有总时限的条件等待，不用固定 `Thread.sleep` 赌时序。
+- 本地 HTTP 桩服务每个测试独占随机端口，并在 `@AfterEach` 停止。同一测试对同一被测实例请求多次时，桩响应设 `Connection: close`，不依赖 JDK `HttpServer` 的 keep-alive 连接回收时序（见 `AiAgentSignedClientHttpTests`、`ModelControlPlaneServiceTest`）。更复杂的桩可评估 MockWebServer 或 WireMock，新增依赖按依赖变更处理。
+- Reactor Netty 全局连接池与事件循环、静态单例、系统属性等进程级共享状态，不能成为测试之间的隐含依赖；用到时写明隔离方式，不依赖测试类或测试方法的执行顺序。
+- 新增或修改涉及网络、并发、超时、SSE 的测试，合并前本机连续三轮运行该测试类全部通过：`./gradlew test --rerun --tests '<测试类全名>'`。
+- 偶发失败按缺陷处理：先查明原因再修，不用自动重试、放宽断言、`@Disabled` 或删除测试换取通过。确需临时禁用时，在注解里写明原因与恢复条件，并在交付说明中列出。
+- 本机 macOS 通过不代表 CI 的 Linux 通过；只在一个平台验证过的结论要写明平台。
+
 ## 必跑命令
 
+与 CI（`.github/workflows/ci.yml`）同序执行：
+
 ```bash
-./gradlew clean test
+./gradlew -q compileJava
+./gradlew test
+bash scripts/check-secrets.sh
 ```
+
+需要排除旧构建产物干扰时改用 `./gradlew clean test`。推送 `main` 后按 `AI_ENGINEERING_GUARDRAILS.md` 的 Definition of Done 核对精确提交的 CI。
