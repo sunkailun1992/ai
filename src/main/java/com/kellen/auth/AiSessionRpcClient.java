@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(name="spring.cloud.nacos.discovery.enabled",havingValue="true",matchIfMissing=true)
 public class AiSessionRpcClient {
-    @DubboReference(check=false,lazy=true,timeout=3000,retries=0)
+    // 本机灰度通道内也校验访问令牌：显式参与灰度，携带入站授权只选同标签 user；稳定请求仍走稳定 user。
+    @DubboReference(check=false,lazy=true,timeout=3000,retries=0,parameters={"traffic.canary.enabled","true"})
     private AuthSessionRpcService sessions;
     public AuthSessionIdentityRpcDTO resolveAccessIdentity(String token) {
         return sessions.resolveAccessIdentity(token);
