@@ -1,7 +1,7 @@
 package com.kellen.storageconfig;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
 import com.kellen.auth.AiRequestIdentityResolver;
 import com.kellen.controlplane.AiControlPlaneAdministrator;
 import com.kellen.rpc.auth.AuthSessionIdentityRpcDTO;

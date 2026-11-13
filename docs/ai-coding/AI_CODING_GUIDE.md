@@ -139,7 +139,7 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 
 涉及 Nacos AI Registry、Agent 接口、DDL、文件 token 或会话归属时，必须执行相关测试或说明无法执行原因。
 
-个人 XXL-JOB 已退役，不再新增其依赖、配置类或 `xxl-job.yaml` 导入。调度选用 NAS 独立 Conductor OSS，通过 REST 接入；业务 Java 调度接口尚未实现，保持 Java 17，不为此引入要求 Java 21 的最新 SDK。
+个人 XXL-JOB 已退役，不再新增其依赖、配置类或 `xxl-job.yaml` 导入。调度选用 NAS 独立 Conductor OSS，通过 REST 接入；业务 Java 调度接口尚未实现；个人服务已统一 Java 21，需要时再评估 Conductor Java SDK，本轮不引入。
 
 ## Scoped AI 身份边界
 

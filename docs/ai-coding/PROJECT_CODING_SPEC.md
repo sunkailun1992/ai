@@ -36,7 +36,7 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 ## 技术基线
 
-- Java 17；依赖版本以 `build.gradle` 为准，不在规范里另抄版本号。
+- Java 21；依赖版本以 `build.gradle` 为准，不在规范里另抄版本号。
 - 保持 Spring Boot 4 依赖线与 Spring AI 2 正式版（见 `AGENTS.md`）；Servlet 与 Validation 使用 `jakarta.*`。
 
 ## 配置中心

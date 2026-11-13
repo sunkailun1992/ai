@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Nacos AI Agent Registry 运行时读取客户端。
  *
- * <p>该客户端使用 Nacos 3.2 官方 {@link AiService} 读取 AgentCard，只消费已发布
+ * <p>该客户端使用 Nacos 3.x 官方 {@link AiService} 读取 AgentCard，只消费已发布
  * Agent 元数据，不修改 Nacos 中的资源。读取失败时返回空，由调用方显式失败暴露
  * Registry 配置问题，不再回退本地模型或普通服务发现地址。</p>
  */

@@ -1,7 +1,7 @@
 package com.kellen.storageconfig;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.junit.jupiter.api.*;
 import org.springframework.core.io.ClassPathResource;

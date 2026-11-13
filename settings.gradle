@@ -1,6 +1,6 @@
 pluginManagement {
     plugins {                                      // 集中声明 Gradle 插件版本，业务 build.gradle 只声明插件 ID。
-        id "org.springframework.boot" version "4.0.4" // Spring Boot 插件版本与 Spring AI 2.x 模型组件保持兼容。
+        id "org.springframework.boot" version "4.0.9" // Spring Boot 插件版本与 Spring AI 2.x 模型组件保持兼容。
         id "io.spring.dependency-management" version "1.1.7" // 依赖管理插件用于导入 Spring Cloud 和 Spring AI BOM。
     }                                              // 插件版本声明结束。
 

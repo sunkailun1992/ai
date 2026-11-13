@@ -2,7 +2,7 @@ package com.kellen.audit;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.config.GlobalConfig;
-import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
 import com.kellen.agent.AiAgentClient;
 import com.kellen.auth.AiRequestIdentity;
 import com.kellen.config.mybatis.MyMetaObjectHandler;

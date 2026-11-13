@@ -4,7 +4,7 @@
 
 ## 1. 总原则
 
-- 先识别当前语言、框架和模块边界；本项目默认按 Java 17、Spring Boot 4、Nacos AI Registry、MyBatis-Plus 和 Gradle 生态落地。
+- 先识别当前语言、框架和模块边界；本项目默认按 Java 21、Spring Boot 4、Nacos AI Registry、MyBatis-Plus 和 Gradle 生态落地。
 - 优先沿用项目已有结构：Controller、Service、Adapter、Validator、Repository、Entity、DTO。
 - 只有当模式能稳定隔离 Agent 发现、Prompt、记忆、审计、多模态校验或数据库访问时才引入。
 - 不允许为简单逻辑硬套 Factory、Manager、Helper、Abstract 层或过深继承。
