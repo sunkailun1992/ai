@@ -2,6 +2,8 @@ package com.ai.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kellen.agent.AiAgentClient;
+import com.kellen.traffic.CanaryContext;
+import com.kellen.traffic.CanaryGrant;
 import com.kellen.agent.AiAgentRegistryClient;
 import com.kellen.agent.AiAgentRequestSigner;
 import com.kellen.agent.AiModelSelectionService;
@@ -61,6 +63,7 @@ class AiAgentSignedClientHttpTests {
     private final CountDownLatch releaseFirstHandler = new CountDownLatch(1);
     private volatile boolean holdFirstHandler;
     private HttpServer server;
+    private final AtomicReference<String> downstreamGrant = new AtomicReference<>();
     private ExecutorService fixtureExecutor;
 
     @BeforeEach void start() throws Exception {
@@ -78,6 +81,7 @@ class AiAgentSignedClientHttpTests {
                         exchange.getRequestHeaders().getFirst("X-Open-Signature"),
                         exchange.getRequestHeaders().getFirst("Content-Type"));
                 requests.add(request);
+                downstreamGrant.set(exchange.getRequestHeaders().getFirst(CanaryGrant.HEADER));
                 String body = request.uri().getPath().endsWith("/stream")
                         ? "data: signed-fixture\n\n"
                         : "{\"success\":true,\"status\":\"SUCCESS\",\"provider\":\"qwen\",\"model\":\"fixture\",\"content\":\"通过\"}";
@@ -123,6 +127,56 @@ class AiAgentSignedClientHttpTests {
 
 
 
+
+    @Test void verifiedCanaryUsesOnlyConfiguredGatewayAndKeepsBusinessSignature() {
+        String key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        var expiry = java.time.Instant.ofEpochSecond(java.time.Instant.now().getEpochSecond() + 30);
+        String token = CanaryGrant.issue("ai", "blue", expiry, key);
+        var inbound = new CanaryContext.Snapshot(new CanaryGrant("ai", "blue", expiry), token);
+        endpoint.set("");
+        signedContext().withPropertyValues("ai.agent-client.canary.gateway-base-url=" + baseUrl(),
+                "ai.agent-client.canary.tags=blue", "traffic.governance.canary.signing-key=" + key)
+                .run(context -> {
+                    AiAgentClient client = context.getBean(AiAgentClient.class);
+                    Flux<String> stream;
+                    CanaryContext.set(inbound);
+                    try {
+                        stream = client.patientAnalysisStream("fixture-conversation", "qwen", "fixture-prompt",
+                                "中文问题", "", "", "", List.of(),
+                                "fixture", "user-fixture", "100", "186", "patient-fixture");
+                    } finally {
+                        CanaryContext.clear();
+                    }
+                    assertThat(stream.collectList().block(Duration.ofSeconds(5))).contains("signed-fixture");
+                    assertThat(requests).hasSize(1);
+                    assertSignature(requests.get(0));
+                    var grant = CanaryGrant.verify(downstreamGrant.get(), key, java.time.Instant.now());
+                    assertThat(grant).isNotNull();
+                    assertThat(grant.service()).isEqualTo("ai-agent");
+                    assertThat(grant.tag()).isEqualTo("blue");
+                    assertThat(grant.expiresAt()).isEqualTo(java.time.Instant.ofEpochSecond(expiry.getEpochSecond()));
+                });
+    }
+
+    @Test void grayRequestWithoutConfiguredGatewayNeverFallsBackToAgentCard() {
+        String key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        var expiry = java.time.Instant.ofEpochSecond(java.time.Instant.now().getEpochSecond() + 30);
+        String token = CanaryGrant.issue("ai", "blue", expiry, key);
+        var inbound = new CanaryContext.Snapshot(new CanaryGrant("ai", "blue", expiry), token);
+        signedContext().withPropertyValues("ai.agent-client.canary.tags=blue",
+                "traffic.governance.canary.signing-key=" + key).run(context -> {
+            AiAgentClient client = context.getBean(AiAgentClient.class);
+            CanaryContext.set(inbound);
+            try {
+                assertThatThrownBy(() -> client.patientAnalysisStream("fixture-conversation", "qwen", "fixture-prompt",
+                        "中文问题", "", "", "", List.of(), "fixture", "user-fixture", "100", "186", "patient-fixture"))
+                        .hasMessage("AI_AGENT_CANARY_UNAVAILABLE");
+                assertThat(requests).isEmpty();
+            } finally {
+                CanaryContext.clear();
+            }
+        });
+    }
 
     @Test void everySseSubscriptionGetsANewSignatureAndNonce() {
         holdFirstHandler = true;

@@ -1,6 +1,8 @@
 package com.kellen.agent;
 
 import com.kellen.config.AiAgentClientProperties;
+import com.kellen.traffic.CanaryContext;
+import com.kellen.traffic.CanaryGrant;
 import com.kellen.file.MediaInput;
 
 import org.slf4j.Logger;
@@ -10,6 +12,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -21,9 +24,7 @@ import java.util.List;
 /**
  * 主 AI 服务调用独立 Agent 执行服务的 HTTP 客户端。
  *
- * <p>该客户端只通过 Nacos AI Registry 解析 AgentCard 中的接口地址，不再保留本地
- * baseUrl、服务发现兜底或本地模型执行兜底。Registry 配错时要尽早暴露，避免主服务
- * 再次变成模型执行层。</p>
+ * <p>普通请求通过 Nacos AI Registry 解析 AgentCard，已授权的患者分析灰度请求使用专用 Gateway 入口。</p>
  */
 @Service
 public class AiAgentClient {
@@ -35,6 +36,7 @@ public class AiAgentClient {
     private final AiModelSelectionService modelSelectionService;
     private final WebClient webClient;
     private final AiAgentRequestSigner requestSigner;
+    private final AiAgentCanaryRoute canaryRoute;
 
     /**
      * 构造 Agent HTTP 客户端。
@@ -50,16 +52,25 @@ public class AiAgentClient {
     }
 
     /** Spring 运行时对全部 Agent 调用使用同一个专用服务签名边界。 */
-    @Autowired
     public AiAgentClient(AiAgentClientProperties properties,
                          AiAgentRegistryClient registryClient,
                          AiModelSelectionService modelSelectionService,
                          AiAgentRequestSigner requestSigner) {
+        this(properties, registryClient, modelSelectionService, requestSigner, null);
+    }
+
+    @Autowired
+    public AiAgentClient(AiAgentClientProperties properties,
+                         AiAgentRegistryClient registryClient,
+                         AiModelSelectionService modelSelectionService,
+                         AiAgentRequestSigner requestSigner,
+                         Environment environment) {
         this.properties = properties;
         this.registryClient = registryClient;
         this.modelSelectionService = modelSelectionService;
         this.webClient = WebClient.builder().build();
         this.requestSigner = requestSigner;
+        this.canaryRoute = new AiAgentCanaryRoute(environment);
     }
 
     /**
@@ -119,11 +130,14 @@ public class AiAgentClient {
                 text(sourceTenantId),
                 text(patientId)
         );
-        String url = endpointUrl(AiAgentRegistryClient.AgentOperation.PATIENT_ANALYSIS,
-                "/api/agents/patient-analysis/stream");
-        log.debug("通过 Nacos AI Agent Registry 调用患者分析 Agent");
+        CanaryContext.Snapshot canary = CanaryContext.get();
+        String url = canary == null ? endpointUrl(AiAgentRegistryClient.AgentOperation.PATIENT_ANALYSIS,
+                AiAgentCanaryRoute.PATIENT_ANALYSIS_PATH) : canaryRoute.url(canary, requestSigner.enabled());
         return Flux.defer(() -> {
             var outgoing = requestSigner.post(webClient, url, request);
+            if (canary != null) {
+                outgoing.header(CanaryGrant.HEADER, canaryRoute.authorize(canary));
+            }
             if (StringUtils.hasText(accessToken)) outgoing.headers(headers -> headers.setBearerAuth(accessToken));
             return outgoing.header("X-AI-Stream-Protocol", "typed-sse-v1")
                     .accept(MediaType.TEXT_EVENT_STREAM).exchangeToFlux(response -> {

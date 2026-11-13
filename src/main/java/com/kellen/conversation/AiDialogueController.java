@@ -3,6 +3,7 @@ package com.kellen.conversation;
 import com.kellen.agent.AiAgentExecutionException;
 import com.kellen.auth.AiRequestIdentityResolver;
 import com.kellen.memory.ChatMemoryMessageDto;
+import com.kellen.rag.RagRetrievalClient;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -72,6 +73,8 @@ public class AiDialogueController {
         String message;
         if (error instanceof AiAgentExecutionException) {
             message = "\n[AI Agent 调用失败] 请稍后重试";
+        } else if (error instanceof RagRetrievalClient.CanaryUnavailableException) {
+            message = "\n[灰度 RAG 检索不可用] 请稍后重试";
         } else if (error instanceof IllegalArgumentException) {
             message = "\n[请求参数错误] 请求参数无效，请检查后重试。";
         } else {

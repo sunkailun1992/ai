@@ -45,6 +45,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,11 +62,13 @@ class AiDialogueErrorHttpTest {
     @Autowired SimpleMeterRegistry metrics;
     @Autowired DbChatMemoryService memory;
     @Autowired ChatAuditService audit;
+    @Autowired RagRetrievalClient rag;
     private HttpServer agent;
 
     @BeforeEach void startAgent() throws Exception {
         metrics.clear();
         clearInvocations(memory, audit);
+        reset(rag);
         upstream.protocol = "typed-sse-v1";
         upstream.body = "event:error\ndata:synthetic-private-provider-error\n\n";
         agent = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -107,6 +110,17 @@ class AiDialogueErrorHttpTest {
         assertFailurePersistence();
     }
 
+    @Test void canaryRagUnavailableUsesASafeErrorEventBeforeAnySuccessOrMemoryWrite() throws Exception {
+        when(rag.retrieveContext(any(), any())).thenThrow(new RagRetrievalClient.CanaryUnavailableException());
+
+        var response = chat();
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("event:error", "data:[灰度 RAG 检索不可用] 请稍后重试")
+                .doesNotContain("RAG_CANARY_UNAVAILABLE", "synthetic-token");
+        verify(audit, never()).recordSuccess(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(memory, never()).addMessage(any(), any(), any());
+    }
+
     private void assertFailurePersistence() {
         assertThat(metrics.get("ai.model.call.count").tag("outcome", "failure").counter().count()).isEqualTo(1);
         assertThat(metrics.find("ai.model.call.count").tag("outcome", "success").counter()).isNull();
@@ -131,6 +145,7 @@ class AiDialogueErrorHttpTest {
             WebMvcAutoConfiguration.class, HttpMessageConvertersAutoConfiguration.class})
     static class Beans {
         @Bean Upstream upstream() { return new Upstream(); }
+        @Bean RagRetrievalClient rag() { return mock(RagRetrievalClient.class); }
         @Bean SimpleMeterRegistry metrics() { return new SimpleMeterRegistry(); }
         @Bean DbChatMemoryService memory() {
             var memory = mock(DbChatMemoryService.class);
@@ -145,7 +160,7 @@ class AiDialogueErrorHttpTest {
         }
         @Bean AiDialogueService dialogue(DbChatMemoryService memory, ChatAuditService audit,
                                         AiAgentClient client,
-                                        SimpleMeterRegistry metrics) {
+                                        SimpleMeterRegistry metrics, RagRetrievalClient rag) {
             var patient = mock(PatientMemoryService.class);
             when(patient.patientContext(any(), any())).thenReturn("");
             var media = mock(MediaInputValidator.class);
@@ -155,7 +170,7 @@ class AiDialogueErrorHttpTest {
                     new AiRolePromptService.ResolvedPrompt("patient-analysis", "fixture", "synthetic"));
             return new AiDialogueService(memory, media, audit, prompt,
                     patient, new AiModelCallObserver(metrics),
-                    client, mock(RagRetrievalClient.class));
+                    client, rag);
         }
         @Bean AiRequestIdentityResolver identities() {
             return new AiRequestIdentityResolver(token -> {

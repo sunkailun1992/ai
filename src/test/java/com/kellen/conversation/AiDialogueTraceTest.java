@@ -8,6 +8,8 @@ import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
 import com.kellen.rag.RagRetrievalClient;
+import com.kellen.traffic.CanaryContext;
+import com.kellen.traffic.CanaryGrant;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.Span;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -65,6 +68,7 @@ class AiDialogueTraceTest {
         provider.close();
         GlobalOpenTelemetry.resetForTest();
         com.kellen.utils.context.TenantContextHolder.clear();
+        CanaryContext.clear();
     }
 
     private Span parent(String name) {
@@ -182,6 +186,71 @@ class AiDialogueTraceTest {
         assertEquals(2, businessSpans().size());
         assertParent(businessSpans().get(0), a, "success");
         assertParent(businessSpans().get(1), b, "success");
+    }
+
+    @Test
+    void canaryRagFailureStopsBeforeAgentAndRestoresSubscriberLane() throws Exception {
+        var canary = new CanaryContext.Snapshot(
+                new CanaryGrant("ai", "blue", Instant.parse("2099-01-01T00:00:00Z")), "synthetic-grant");
+        var workerLane = new CanaryContext.Snapshot(
+                new CanaryGrant("ai", "other", Instant.parse("2099-01-01T00:00:00Z")), "synthetic-worker-grant");
+        when(rag.retrieveContext(any(), any())).thenAnswer(invocation -> {
+            if (CanaryContext.get() == canary) {
+                throw new RagRetrievalClient.CanaryUnavailableException();
+            }
+            assertNull(CanaryContext.get());
+            return "";
+        });
+        Span parent = parent("rag-lane");
+        var worker = Executors.newSingleThreadExecutor();
+        try {
+            CanaryContext.set(canary);
+            Flux<String> gray = assemble(parent, Flux.just("synthetic-output"));
+            CanaryContext.clear();
+            Flux<String> stable = assemble(parent, Flux.just("synthetic-output"));
+
+            worker.submit(() -> {
+                CanaryContext.set(workerLane);
+                try {
+                    assertThrows(RagRetrievalClient.CanaryUnavailableException.class, gray::blockLast);
+                    assertSame(workerLane, CanaryContext.get());
+                    verifyNoInteractions(agent, audit);
+                    assertEquals("synthetic-output", stable.blockLast());
+                    assertSame(workerLane, CanaryContext.get());
+                } finally {
+                    CanaryContext.clear();
+                }
+            }).get(5, TimeUnit.SECONDS);
+            assertEquals(2, businessSpans().size());
+            assertParent(businessSpans().get(0), parent, "error");
+            assertParent(businessSpans().get(1), parent, "success");
+        } finally {
+            worker.shutdownNow();
+            parent.end();
+        }
+    }
+
+    @Test
+    void agentAssemblyReceivesVerifiedLaneWithoutLeakingItToSubscription() {
+        var canary = new CanaryContext.Snapshot(
+                new CanaryGrant("ai", "blue", Instant.parse("2099-01-01T00:00:00Z")), "synthetic-grant");
+        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            assertSame(canary, CanaryContext.get());
+            return Flux.defer(() -> {
+                assertNull(CanaryContext.get());
+                return Flux.just("synthetic-output");
+            });
+        });
+
+        CanaryContext.set(canary);
+        var request = new AiChatRequest("fixture", "synthetic-question", null);
+        var identity = new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token");
+        Flux<String> stream = service.stream(request, identity);
+        CanaryContext.clear();
+
+        assertEquals("synthetic-output", stream.blockLast());
+        assertNull(CanaryContext.get());
     }
 
     @Test

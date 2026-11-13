@@ -44,6 +44,10 @@ public class AiAgentRequestSigner {
         return new AiAgentRequestSigner(new AiAgentClientAuthProperties(false, "", ""), JsonMapper.builder().build());
     }
 
+    boolean enabled() {
+        return properties.enabled();
+    }
+
     /** 准备 POST；启用后拒绝非法目标，且不允许签名失败时无签名重试。 */
     WebClient.RequestHeadersSpec<?> post(WebClient client, String endpointUrl, Object body) {
         if (!properties.enabled()) {

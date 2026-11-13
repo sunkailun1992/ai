@@ -11,6 +11,7 @@ import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
 import com.kellen.rag.RagRetrievalClient;
+import com.kellen.traffic.CanaryContext;
 
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
@@ -19,6 +20,7 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * 患者分析 AI 对话编排服务。
@@ -82,10 +84,11 @@ public class AiDialogueService {
                 "model execution is delegated to ai-agent through Nacos AI Registry");
     }
 
-    /** 已认证 User 身份作为不可变值进入异步链。 */
+    /** 在进入异步链前保存已验证的身份和选路上下文。 */
     public Flux<String> stream(AiChatRequest request, AiRequestIdentity identity) {
         if (identity == null) return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
         Context entryParent = Context.current();
+        CanaryContext.Snapshot canary = CanaryContext.get();
         return Flux.defer(() -> {
             DialogueObservation observation = new DialogueObservation(entryParent, identity);
             Flux<String> execution;
@@ -94,7 +97,8 @@ public class AiDialogueService {
                 List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
                 String normalizedConversationId = identity.conversationKey(request.conversationId());
                 execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
-                        media, "chat_stream", normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(), observation, identity);
+                        media, "chat_stream", normalizedConversationId, request.patientId(), request.effectiveSourceTenantId(),
+                        observation, identity, canary);
             } catch (RuntimeException error) {
                 observation.failed();
                 observation.finish(reactor.core.publisher.SignalType.ON_ERROR);
@@ -125,6 +129,8 @@ public class AiDialogueService {
      * @param patientId                患者 ID，用于检索长期记忆。
      * @param sourceTenantId           来源业务租户 ID。
      * @param observation              整轮编排的观测上下文。
+     * @param identity                 已认证的 User 身份。
+     * @param canary                   进入异步链前已验证的灰度上下文。
      * @return Agent 逐段输出的 Flux。
      */
     private Flux<String> streamInternal(String role,
@@ -137,19 +143,21 @@ public class AiDialogueService {
                                         String patientId,
                                         String sourceTenantId,
                                         DialogueObservation observation,
-                                        AiRequestIdentity identity) {
+                                        AiRequestIdentity identity,
+                                        CanaryContext.Snapshot canary) {
         String message = requiredText(rawMessage, "message");
         String mediaSummary = mediaInputValidator.summarize(media);
         AiRolePromptService.ResolvedPrompt resolvedPrompt = aiRolePromptService.resolve(role, instruction);
         observation.prompt(resolvedPrompt);
         String historyContext = observation.step("memory.context", () -> historyContext(normalizedConversationId, patientId, sourceTenantId));
-        String ragContext = observation.step("rag.prefetch", () -> ragRetrievalClient.retrieveContext(message, normalizedConversationId));
+        String ragContext = observation.step("rag.prefetch",
+                () -> inCanaryContext(canary, () -> ragRetrievalClient.retrieveContext(message, normalizedConversationId)));
         long startedAt = modelCallObserver.start();
         StringBuilder content = new StringBuilder();
 
         dbChatMemoryService.addMessage(normalizedConversationId, "user", message);
 
-        return aiAgentClient.patientAnalysisStream(
+        return inCanaryContext(canary, () -> aiAgentClient.patientAnalysisStream(
                         normalizedConversationId,
                         null,
                         resolvedPrompt.systemPrompt(),
@@ -163,7 +171,7 @@ public class AiDialogueService {
                         identity.tenantId(),
                         sourceTenantId,
                         patientId,
-                        identity.accessToken())
+                        identity.accessToken()))
                 .doOnNext(content::append)
                 .doOnComplete(() -> observation.run(() -> {
                     String assistantContent = content.toString();
@@ -262,6 +270,16 @@ public class AiDialogueService {
 
         private static String metadata(String value) {
             return value != null && value.matches("[A-Za-z0-9_.-]{1,128}") ? value : "unknown";
+        }
+    }
+
+    private static <T> T inCanaryContext(CanaryContext.Snapshot canary, Supplier<T> action) {
+        CanaryContext.Snapshot previous = CanaryContext.get();
+        try {
+            CanaryContext.set(canary);
+            return action.get();
+        } finally {
+            CanaryContext.set(previous);
         }
     }
 
