@@ -26,12 +26,15 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
     void createsTheCurrentBusinessSchemaTwiceWithoutMysqlSyntax() throws Exception {
         script("db/postgresql/ai-schema.sql");
         script("db/postgresql/ai-schema.sql");
+        // 15 张业务表 + 存储控制面 3 张（ai_storage_configuration/setting/operation，后者时间列为 TIMESTAMP WITH TIME ZONE）。
         assertThat(number("SELECT count(*) FROM information_schema.tables WHERE table_schema = '" + schema + "' AND table_type = 'BASE TABLE'"))
-                .isEqualTo(15);
+                .isEqualTo(18);
         assertThat(number("SELECT count(*) FROM information_schema.columns WHERE table_schema = '" + schema + "' AND column_name = 'is_delete' AND data_type = 'boolean'"))
-                .isEqualTo(15);
+                .isEqualTo(18);
         assertThat(number("SELECT count(*) FROM information_schema.columns WHERE table_schema = '" + schema + "' AND column_name = 'modify_date_time' AND data_type = 'timestamp without time zone'"))
                 .isEqualTo(15);
+        assertThat(number("SELECT count(*) FROM information_schema.columns WHERE table_schema = '" + schema + "' AND column_name = 'modify_date_time' AND data_type = 'timestamp with time zone'"))
+                .isEqualTo(3);
         assertThat(number("SELECT CASE WHEN 'Café' COLLATE public.fleet_general_ci = 'CAFE' THEN 1 ELSE 0 END")).isEqualTo(1);
         assertThat(number("SELECT CASE WHEN 'Café' COLLATE public.fleet_general_ci LIKE 'caf%' THEN 1 ELSE 0 END")).isEqualTo(1);
     }
