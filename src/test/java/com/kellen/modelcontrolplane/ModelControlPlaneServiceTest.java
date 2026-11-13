@@ -321,6 +321,8 @@ class ModelControlPlaneServiceTest {
     private static void answer(HttpExchange exchange, int status, String body) throws java.io.IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
+        // 同一服务实例的多次目录读取各走新连接，不依赖 JDK HttpServer 的 keep-alive 连接回收时序。
+        exchange.getResponseHeaders().set("Connection", "close");
         exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
         try { if (bytes.length > 0) exchange.getResponseBody().write(bytes); }
         catch (java.io.IOException closedConsumer) { /* 过大响应/超时取消后不输出原始传输错误。 */ }
