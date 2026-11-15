@@ -52,7 +52,7 @@ public class AiRolePromptInitializer implements ApplicationRunner {
                     DefaultPatientAnalysisPrompt.VERSION,
                     DefaultPatientAnalysisPrompt.DESCRIPTION));
         } catch (BadSqlGrammarException exception) {
-            log.warn("AI 角色 Prompt 表不可用，已跳过启动种子导入；清空数据库后请先执行 db/ai-init.sql", exception);
+            log.warn("AI 角色 Prompt 表不可用，已跳过启动种子导入；表由 Flyway 迁移创建，请检查迁移是否已执行", exception);
         }
     }
 }

@@ -87,7 +87,7 @@ class StorageConfigurationHttpTest {
             org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration.class,
             org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration.class})
     static class Beans {
-        @Bean DriverManagerDataSource dataSource(){var ds=new DriverManagerDataSource("jdbc:h2:mem:storage_http_"+UUID.randomUUID()+";MODE=PostgreSQL;DB_CLOSE_DELAY=-1","sa","");new ResourceDatabasePopulator(new ClassPathResource("storage-schema.sql")).execute(ds);new JdbcTemplate(ds).execute("CREATE TABLE ai_file_object(id BIGINT,storage_platform VARCHAR(128),is_delete BOOLEAN)");return ds;}
+        @Bean DriverManagerDataSource dataSource(){var ds=new DriverManagerDataSource("jdbc:h2:mem:storage_http_"+UUID.randomUUID()+";MODE=PostgreSQL;DB_CLOSE_DELAY=-1","sa","");new ResourceDatabasePopulator(new ClassPathResource("storage-schema.sql")).execute(ds);new JdbcTemplate(ds).execute("CREATE TABLE ai_file_object(id BIGINT,storage_platform VARCHAR(128),is_deleted BOOLEAN)");return ds;}
         @Bean JdbcTemplate jdbc(DriverManagerDataSource ds){return new JdbcTemplate(ds);}
         @Bean StorageCredentialCipher cipher(){return new StorageCredentialCipher(Base64.getEncoder().encodeToString(new byte[32]),"fixture");}
         @Bean StorageRuntimeRegistry registry(StorageCredentialCipher cipher){return new StorageRuntimeRegistry(cipher,(r,c)->new StorageRuntimeRegistryTest.FakeHandle());}

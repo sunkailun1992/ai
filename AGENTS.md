@@ -26,7 +26,7 @@
 - 项目类型：患者分析与多模态报告解读后端
 - 技术栈：Java 21、Spring Boot 4、Spring AI、Spring Cloud Alibaba、Nacos、Dubbo、MyBatis-Plus、PostgreSQL、Gradle Wrapper、`com:rpc-api`、`com:utils`
 - 外部模型：Google Gemini、DeepSeek/OpenAI-compatible、通义千问 DashScope/OpenAI-compatible（由 `ai-agent` 执行层配置）
-- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.6.8`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
+- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.6.9`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
 - 核心风险：模型 Provider 选错、医疗 Prompt 污染、外部媒体 URL SSRF、重新引入 AI 对话文件流入口、密钥泄露、患者资料越权、会话历史越权、日志输出用户隐私
 
 ## 修改前阅读顺序
@@ -64,9 +64,9 @@
 - 角色 Prompt 统一写入 `ai_role_prompt`，新增角色不得把完整长 Prompt 固化到 YAML。
 - 既有私有文件展示仅通过 `/api/v1/files/{fileId}/view?token=...`（或 `/api/files` 别名），先校验展示 token，再按已保存平台签名；不提供普通 User 直传登记或文件 owner 管理 API。
 - 文件展示和 AI 多模态附件 URL 必须使用后端令牌地址 `/api/v1/files/{fileId}/view?token=...`；后端校验 token 后再生成短时签名 OSS URL，HEAD 请求必须返回真实 Content-Type 供多模态校验器使用。
-- 新增或修改 MyBatis-Plus 实体时，必须同步新增或维护 `src/main/resources/db/postgresql/` 的 PostgreSQL 表、字段中文注释和 `src/test/resources/schema.sql`；历史 MySQL 脚本不回改，已执行的 PG 脚本追加增量，并补齐相应测试。字段含义要能直接支撑数据库查看和外部系统对接。
+- 新增或修改 MyBatis-Plus 实体时，必须新增 Flyway 迁移（含字段中文注释）并同步 `src/test/resources/schema.sql`，补齐相应测试。字段含义要能直接支撑数据库查看和外部系统对接。
 - 新增业务表必须补齐公共治理字段；数据库列 `version` 只做乐观锁，Prompt、模板、协议等业务版本使用 `prompt_version`、`template_version`、`protocol_version` 等明确列名。
-- AI 服务全新或清空后的业务库首次启动前，必须先在目标业务库手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行 `db/postgresql/ai-schema.sql`；公共脚本包含 `ddl_history` 和 Seata AT `undo_log`，不能依赖应用首次启动自动创建基础表。
+- 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块的 `spring.datasource.dynamic.seata` 跟随 `seata.enabled`，Seata 开启时数据源创建阶段（早于 Flyway）就会检查该表，所以启用 Seata 前库里须已完成迁移。AI 实体继承 `AiGovernanceEntity`（只承接 `updateTime`）并保持物理删除，不继承带 `@TableLogic` 的实体基类。
 - 多模态附件只能使用配置白名单协议，默认 `http` / `https`；文件、图片、PDF、JSON 材料必须先上传到业务文件服务或 OSS，再把可访问 URL 传入 `attachments`。
 - 新增模型 Provider、记忆策略、多模态校验、审计或响应结构时，必须优先沿用 `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md` 中的 Provider、Application Service、Strategy、Adapter、Validator、Repository 等既有模式。
 - 新增本服务对外 Controller、服务前缀，或新增后续独立 Agent 服务需要经网关访问时，必须同步评估 `../gateway` 的 Nacos `gateway-spring.yaml`；需要 Swagger UI 聚合的服务要先保证对应网关文档路径返回 200，再加入 `springdoc.swagger-ui.urls`。

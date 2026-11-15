@@ -185,7 +185,7 @@ class ChatAuditTenantPersistenceTest {
                         system_prompt text, assistant_content text, media_summary text,
                         success boolean NOT NULL DEFAULT false, error_message varchar(1024),
                         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        modify_date_time timestamp DEFAULT CURRENT_TIMESTAMP
+                        update_time timestamp DEFAULT CURRENT_TIMESTAMP
                     )
                     """);
             return dataSource;

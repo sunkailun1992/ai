@@ -68,9 +68,9 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 ## DDL 维护
 
-- DDL 入口是 `com.kellen.config.PostgresqlDdl`，`getSqlFiles()` 声明脚本列表与执行顺序；脚本在 `src/main/resources/db/postgresql/`。修改前先看该列表。
-- 全新或清空后的业务库首次启动前，按 `AGENTS.md` 先手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行 `db/postgresql/ai-schema.sql`。
-- 修改已存在的脚本前，先查目标库 `ddl_history` 是否执行过。执行过或无法确认的，一律新增增量脚本并追加到 `getSqlFiles()`，不改历史脚本（先例：`ai-storage-console-20261111.sql`）。
+- 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。
+- Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块的 `spring.datasource.dynamic.seata` 跟随 `seata.enabled`，Seata 开启时数据源创建阶段（早于 Flyway）就会检查该表，所以启用 Seata 前库里须已完成迁移。
+- 删列、删表的迁移先在 `DO` 块里核对整列（或整表）为空，不为空就 `RAISE EXCEPTION` 让整版回滚（先例：`V4__drop_unused_columns.sql`、`V5__drop_unused_tables_and_unify_audit_time.sql`）。
 - 脚本必须可重复执行：`IF NOT EXISTS`、`INSERT ... ON CONFLICT DO NOTHING` 或带明确主键/租户条件的确定性 `UPDATE`；`ADD COLUMN IF NOT EXISTS` 只解决重复执行，仍须核对实际列结构。
 - 历史 MySQL 脚本（`src/main/resources/db/` 根下的 `*.sql`）不回改、不在 PostgreSQL 执行。
 - 新增字段同步 PostgreSQL 字段中文注释（`COMMENT ON COLUMN`）和 `src/test/resources/schema.sql`。
@@ -84,7 +84,7 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 ## 实体与 Repository
 
-- 实体用 MyBatis-Plus `@TableName` 映射。现有 AI 业务实体继承 `AiGovernanceEntity`（只映射自动填充的 `modifyDateTime`）；存储控制面实体是独立的 `final class`。
+- 实体用 MyBatis-Plus `@TableName` 映射。现有 AI 业务实体继承 `AiGovernanceEntity`（只映射自动填充的 `updateTime`，保持物理删除）；存储控制面实体是独立的 `final class`。
 - 数据访问接口命名为 `XxxRepository` 并加 `@Mapper`。普通实体继承 `AiBaseRepository<T>`，它在 `BaseMapper` 上保留 `save`、`findById` 等兼容语义；需要比较并更新、显式租户或平台范围时，在 Repository 上写注解 SQL（见存储控制面的三个 Repository）。
 - 不拼接用户输入形成 SQL，参数一律绑定。
 
@@ -120,7 +120,7 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 ## 逻辑删除
 
-- 见 `UTILS_PUBLIC_SPEC.md`「数据库规则」：手写 SQL 的查询显式带 `is_delete = false`，删除写成软删除并递增 `version`。
+- 见 `UTILS_PUBLIC_SPEC.md`「数据库规则」：手写 SQL 的查询显式带 `is_deleted = false`，删除写成软删除并递增 `version`。
 
 ## 测试
 
@@ -147,7 +147,7 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 - 是否放进正确的功能包，没有新建按层划分的平行目录或 `common`、`helper` 包？
 - 是否先检查 `../utils` 已有能力？
-- 新增表是否补齐公共治理字段、PostgreSQL 注释与 H2 `schema.sql`，并按 `ddl_history` 规则新增增量脚本？
+- 新增表是否补齐公共列、PostgreSQL 注释与 H2 `schema.sql`，并只新增 Flyway 迁移版本？
 - 先查后改是否携带期望 `version`？
 - 新表是用户/租户数据（显式写 `tenant_id`）还是平台数据（`@InterceptorIgnore` 加平台范围），是否写清？
 - 受保护接口是否经过 `AiRequestIdentityResolver` 或 `AiControlPlaneAdministrator`？

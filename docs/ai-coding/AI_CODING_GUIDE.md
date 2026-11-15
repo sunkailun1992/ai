@@ -101,14 +101,14 @@
 
 ## 7. 数据库规则
 
-- 当前表结构由 `PostgresqlDdl.java` 加载 `db/postgresql/common-infra-schema.sql` 与 `db/postgresql/ai-schema.sql`；历史 MySQL 脚本不在 PostgreSQL 执行。
-- 全新或清空后的业务库首次启动前，必须先在目标业务库手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行服务的 `db/postgresql/ai-schema.sql`；Seata AT 会在 `DataSource` 初始化时先检查 `undo_log`，不能依赖 MyBatis-Plus DDL 首次启动自动创建该表。
-- 当前 PostgreSQL 表结构变化使用增量脚本并同步 H2 测试结构；已发布的历史 MySQL 脚本不回改。
+- 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。
+- Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块的 `spring.datasource.dynamic.seata` 跟随 `seata.enabled`，Seata 开启时数据源创建阶段（早于 Flyway）就会检查该表，所以启用 Seata 前库里须已完成迁移。
+- H2 测试库结构 `src/test/resources/schema.sql`、`storage-schema.sql` 同步维护（测试启动类排除 Flyway，PostgreSQL 迁移由 `PostgresqlSchemaLiveTest` 在真库上验证）。
 - 测试环境使用 `src/test/resources/schema.sql`。
 - 数据库访问统一使用 MyBatis-Plus Repository。
 - 不拼接用户输入形成 SQL。
 - 新增字段必须同步 PostgreSQL DDL 注释和 H2 测试 schema。
-- 新增业务表默认补齐公共治理字段：`code`、`description`、`create_date_time`、`create_name`、`modify_date_time`、`modify_name`、`is_delete`、`type`、`state`、`label`、`sorting`、`version`、`tenant_id`。
+- 新增业务表默认包含 `id`、`create_time`、`update_time`、`creator`、`updater`、`is_deleted`、`tenant_id`，用乐观锁时加 `version`；`code`、`description`、`type`、`state`、`sorting` 按业务需要添加，不再使用 `label`。
 - 数据库列 `version` 只表示乐观锁版本号；Prompt、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
 - 现有 AI 业务表保留 `bigint` 自增主键和 `created_at` / `updated_at` 运行时字段，后续新增通用后台管理型业务表再优先继承 `EntityBase`。
 

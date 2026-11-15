@@ -38,7 +38,7 @@ src/main/java/com/kellen
 | `agent` | 按 Nacos AI Registry 调用 `ai-agent`（`AiAgentClient`、注册中心客户端、请求签名）与运行时模型选择。 |
 | `audit` | 对话审计 `ai_chat_message` 落库。 |
 | `auth` | 请求身份解析与租户上下文（`AiRequestIdentity`）。 |
-| `config` | `ai.*` 类型安全配置绑定与 PostgreSQL DDL 初始化（`PostgresqlDdl`）。 |
+| `config` | `ai.*` 类型安全配置绑定。 |
 | `controlplane` | 平台控制面管理员校验。 |
 | `conversation` | 对话入口与编排（`AiDialogueController`、`AiDialogueService`）及其请求/响应对象。 |
 | `exception` | 统一异常响应。 |
@@ -58,7 +58,7 @@ src/main/java/com/kellen
 - 新增能力放进对应功能包；确属新功能时新建 `com.kellen.<功能>` 包，把该功能的 Controller、Service、Repository、Entity 与请求/响应对象放在一起，不另建按层划分的平行目录。
 - 新增多模态、Prompt、安全校验、审计或记忆策略时优先复用现有功能包里的组件，不新增 `helper`、`manager`、`common` 等低信息目录。
 - 新增测试放 `src/test/java`，包名与被测类一致（主代码均在 `com.kellen.*`）；`src/test/java/com/ai` 下是早期测试，可原地维护。测试配置和 Mock 数据放 `src/test/resources`。
-- `src/main/resources/db/postgresql/` 放运行时 PostgreSQL 全量与增量脚本；`src/main/resources/db/` 根下的 `ai-init.sql` 等是历史 MySQL 脚本，不回改；`src/test/resources/schema.sql` 放 H2 测试库 DDL。
+- `src/main/resources/db/migration/` 放 Flyway 迁移；`src/test/resources/schema.sql`、`storage-schema.sql` 放 H2 测试库 DDL。
 - Nacos 真实配置只维护在配置中心，不恢复 `docs/nacos` 本地模板目录。
 - 构建产物、日志、IDE 文件、本机模块文件和系统文件不得提交。
 

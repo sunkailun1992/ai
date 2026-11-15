@@ -24,11 +24,11 @@
 
 ## 数据库规则
 
-- 表结构变动时，同步 `src/main/resources/db/postgresql/` 的权威 DDL、实体与 `src/test/resources/schema.sql`，并记录 migration 和回滚影响；已执行的脚本按 `PROJECT_CODING_SPEC.md`「DDL 维护」追加增量脚本。
+- 表结构变动时，新增 Flyway 迁移并同步实体与 `src/test/resources/schema.sql`，记录回滚影响；表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。
 - 表结构变更 SQL 必须关联对应需求与交付记录。
 - 数据库状态字段要有对应枚举类，整数状态枚举实现 `IEnum<Integer>`，用于接口返回和中文说明输出。现有 AI 业务实体没有映射 `type`、`state`；新增实体需要读写这类字段时按此执行，不把业务枚举放进公共字段基类。
 - 租户：utils 的 `MyBatisPlusConfig` 注册了 `TenantLineInnerInterceptor`。`ai` 的对话审计由本轮已验证的 `AiRequestIdentity` 显式写入 `tenant_id`，不依赖全局租户插件、ambient 上下文或数据库默认值；平台级存储控制面表在 Repository 上用 `@InterceptorIgnore(tenantLine = "true")` 显式跳过租户拼接。新增表先判断属于用户/租户数据还是平台数据，再选其中一种写法。
-- 逻辑删除：现有 AI 实体没有使用 `@TableLogic`。手写 SQL 的查询显式带 `is_delete = false`，删除写成软删除并同步递增 `version`（见 `StorageConfigurationRepository`）。
+- 逻辑删除：现有 AI 实体没有使用 `@TableLogic`。手写 SQL 的查询显式带 `is_deleted = false`，删除写成软删除并同步递增 `version`（见 `StorageConfigurationRepository`）。
 
 ## 乐观锁规则
 

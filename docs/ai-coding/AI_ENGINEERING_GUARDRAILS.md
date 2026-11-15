@@ -32,7 +32,7 @@
 3. 主服务没有重新引入 Spring AI 模型执行依赖。
 4. Nacos AI Registry 配置和 AgentCard 读取路径清晰。
 5. 多模态输入有协议、数量、远程 Content-Type 和 MIME 限制。
-6. MyBatis-Plus 实体字段、索引和种子数据与 `src/main/resources/db/postgresql/` 的 PostgreSQL 脚本及 `src/test/resources/schema.sql` 保持一致；全新或清空后的业务库首次启动前，已在目标业务库先手动执行 utils 的 `db/postgresql/common-infra-schema.sql`，再执行 `db/postgresql/ai-schema.sql`，确保 `ddl_history` 和 Seata AT `undo_log` 先于应用启动存在。`src/main/resources/db/ai-init.sql` 是历史 MySQL 脚本，不回改、不再执行。
+6. MyBatis-Plus 实体字段、索引和种子数据与 Flyway 迁移及 `src/test/resources/schema.sql` 保持一致；表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。
 7. 异常响应不泄露内部堆栈、密钥或底层服务地址。
 8. 文档同步更新接口示例、配置说明和验证命令。
 9. 已执行 `TESTING_SPEC.md` 的必跑命令，新增或修改的测试符合「测试稳定性」；未执行的写明原因。

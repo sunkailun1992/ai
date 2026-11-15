@@ -16,8 +16,8 @@ public interface StorageOperationRepository {
     long activeProbes(String id);
     @Insert("INSERT INTO ai_storage_operation(id,scope,actor_id,request_id,action,configuration_id,fingerprint,operation_json,status,cleanup_status,started_at) VALUES(#{id},'PLATFORM',#{actorId},#{requestId},#{action},#{configurationId},#{fingerprint},#{operationJson},#{status},#{cleanupStatus},#{startedAt})")
     int insert(StorageOperationEntity row);
-    @Update("UPDATE ai_storage_operation SET operation_json=#{operationJson},status=#{status},cleanup_status=#{cleanupStatus},modify_date_time=CURRENT_TIMESTAMP WHERE scope='PLATFORM' AND id=#{id}")
+    @Update("UPDATE ai_storage_operation SET operation_json=#{operationJson},status=#{status},cleanup_status=#{cleanupStatus},update_time=CURRENT_TIMESTAMP WHERE scope='PLATFORM' AND id=#{id}")
     int update(StorageOperationEntity row);
-    @Update("UPDATE ai_storage_operation SET operation_json=#{r.operationJson},status=#{r.status},cleanup_status=#{r.cleanupStatus},modify_date_time=CURRENT_TIMESTAMP WHERE scope='PLATFORM' AND id=#{r.id} AND status IN ('PENDING','RUNNING') AND operation_json=#{expectedJson}")
+    @Update("UPDATE ai_storage_operation SET operation_json=#{r.operationJson},status=#{r.status},cleanup_status=#{r.cleanupStatus},update_time=CURRENT_TIMESTAMP WHERE scope='PLATFORM' AND id=#{r.id} AND status IN ('PENDING','RUNNING') AND operation_json=#{expectedJson}")
     int recoverUnknown(@Param("r")StorageOperationEntity row,@Param("expectedJson")String expectedJson);
 }

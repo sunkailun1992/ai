@@ -35,7 +35,6 @@ import static org.mockito.Mockito.*;
         "spring.cloud.nacos.discovery.enabled=false", // 单元测试不向真实 Nacos 注册服务。
         "seata.enabled=false", // 单元测试不初始化 Seata 客户端或连接事务注册中心。
         "spring.datasource.dynamic.seata=false", // H2 测试数据源不走 Seata 代理。
-        "ai.ddl.enabled=false", // H2 使用测试 schema.sql，不执行 MySQL DDL runner。
         "spring.datasource.url=jdbc:h2:mem:ai-file-persistence-test;MODE=MySQL;DB_CLOSE_DELAY=-1", // 使用 H2 内存库模拟 MySQL。
         "spring.datasource.driver-class-name=org.h2.Driver", // 指定 H2 JDBC 驱动。
         "spring.datasource.username=sa", // H2 默认用户名。

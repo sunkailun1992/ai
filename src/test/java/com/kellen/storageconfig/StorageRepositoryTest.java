@@ -16,7 +16,7 @@ class StorageRepositoryTest {
     @Test void configurationCasAndReferencesAreDatabaseEnforced() throws Exception {
         var ds=new DriverManagerDataSource("jdbc:h2:mem:storage_"+UUID.randomUUID()+";MODE=PostgreSQL;DB_CLOSE_DELAY=-1","sa","");
         new ResourceDatabasePopulator(new ClassPathResource("storage-schema.sql")).execute(ds);
-        new JdbcTemplate(ds).execute("CREATE TABLE ai_file_object(id BIGINT,storage_platform VARCHAR(128),is_delete BOOLEAN)");
+        new JdbcTemplate(ds).execute("CREATE TABLE ai_file_object(id BIGINT,storage_platform VARCHAR(128),is_deleted BOOLEAN)");
         var cfg=new MybatisConfiguration();cfg.setMapUnderscoreToCamelCase(true);cfg.addMapper(StorageConfigurationRepository.class);
         var factory=new MybatisSqlSessionFactoryBean();factory.setDataSource(ds);factory.setConfiguration(cfg);
         var interceptor=new com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor();

@@ -80,8 +80,8 @@
 - [ ] 表字段、索引、默认值、唯一约束正确，公共治理字段齐全。
 - [ ] 租户方式正确：用户/租户数据显式写 tenant_id，平台数据用 @InterceptorIgnore 并限定平台范围。
 - [ ] 逻辑删除和乐观锁 version 处理正确。
-- [ ] 增量脚本可重复执行，已追加到 PostgresqlDdl#getSqlFiles()，并同步 H2 schema.sql。
-- [ ] 全新或空业务库首次启动前，已先执行 utils 的 db/postgresql/common-infra-schema.sql，再执行 db/postgresql/ai-schema.sql。
+- [ ] 表结构改动只新增 `src/main/resources/db/migration/V<下一个>__<说明>.sql`，没有修改已提交的迁移文件，并同步 H2 schema.sql。
+- [ ] 新库保持空库，由服务首次启动时的 Flyway 建表（含 Seata AT `undo_log`），没有手工执行任何公共脚本。
 
 ## 权限
 - [ ] 受保护接口经过 AiRequestIdentityResolver 或 AiControlPlaneAdministrator。

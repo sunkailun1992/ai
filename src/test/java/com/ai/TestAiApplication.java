@@ -18,6 +18,7 @@ import org.redisson.spring.starter.RedissonAutoConfigurationV2;
 import org.redisson.spring.starter.RedissonAutoConfigurationV4;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
@@ -26,12 +27,13 @@ import org.springframework.context.annotation.FilterType;
  * AI 服务测试启动配置。
  *
  * <p>生产启动类完整接入 utils 动态数据源和外部基础设施；测试只验证 AI 业务上下文，
- * 因此排除 Seata 数据源代理与 Redis 组件，使用 H2 内存库完成业务测试。</p>
+ * 因此排除 Seata 数据源代理、Flyway 迁移（PostgreSQL 专用，H2 用测试 schema.sql）与 Redis 组件，使用 H2 内存库完成业务测试。</p>
  */
 @SpringBootConfiguration
 @EnableAutoConfiguration(exclude = {
         MpmAutoConfiguration.class,
         DynamicDataSourceAutoConfiguration.class,
+        FlywayAutoConfiguration.class,
         DynamicDataSourcePoolMetricsAutoConfiguration.class,
         SeataAutoConfiguration.class,
         SeataCoreAutoConfiguration.class,

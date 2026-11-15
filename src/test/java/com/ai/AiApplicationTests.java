@@ -27,7 +27,6 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.cloud.nacos.discovery.enabled=false", // 单元测试不向真实 Nacos 注册服务。
         "seata.enabled=false", // 单元测试不初始化 Seata 客户端或连接事务注册中心。
         "spring.datasource.dynamic.seata=false", // H2 测试数据源不走 Seata 代理。
-        "ai.ddl.enabled=false", // H2 使用测试 schema.sql，不执行 MySQL DDL runner。
         "spring.datasource.url=jdbc:h2:mem:ai-test;MODE=MySQL;DB_CLOSE_DELAY=-1", // 使用 H2 内存库模拟 MySQL。
         "spring.datasource.driver-class-name=org.h2.Driver", // 指定 H2 JDBC 驱动。
         "spring.datasource.username=sa", // H2 默认用户名。
@@ -58,18 +57,18 @@ class AiApplicationTests {
         try {
             modelSelections.save(entity);
             LocalDateTime inserted = jdbc.queryForObject(
-                    "SELECT modify_date_time FROM ai_model_selection WHERE id = ?", LocalDateTime.class, entity.getId());
+                    "SELECT update_time FROM ai_model_selection WHERE id = ?", LocalDateTime.class, entity.getId());
             assertThat(inserted).isAfter(LocalDateTime.of(2020, 1, 1, 0, 0));
-            jdbc.update("UPDATE ai_model_selection SET modify_date_time = ? WHERE id = ?",
+            jdbc.update("UPDATE ai_model_selection SET update_time = ? WHERE id = ?",
                     LocalDateTime.of(2000, 1, 1, 0, 0), entity.getId());
             AiModelSelectionEntity loaded = modelSelections.findById(entity.getId()).orElseThrow();
             loaded.setProvider("qwen");
             modelSelections.save(loaded);
             LocalDateTime updated = jdbc.queryForObject(
-                    "SELECT modify_date_time FROM ai_model_selection WHERE id = ?", LocalDateTime.class, entity.getId());
+                    "SELECT update_time FROM ai_model_selection WHERE id = ?", LocalDateTime.class, entity.getId());
             assertThat(updated).isAfter(LocalDateTime.of(2020, 1, 1, 0, 0));
             assertThat(new tools.jackson.databind.ObjectMapper().writeValueAsString(loaded))
-                    .doesNotContain("modifyDateTime", "modify_date_time");
+                    .doesNotContain("updateTime", "update_time");
         } finally {
             if (entity.getId() != null) {
                 modelSelections.deleteById(entity.getId());

@@ -11,6 +11,6 @@ public interface StorageSettingsRepository {
     StorageSettingsEntity current();
     @Select("SELECT * FROM ai_storage_setting WHERE id='PLATFORM' AND scope='PLATFORM' FOR UPDATE")
     StorageSettingsEntity locked();
-    @Update("UPDATE ai_storage_setting SET default_platform=#{r.defaultPlatform},legacy_null_platform=#{r.legacyNullPlatform},base_dir=#{r.baseDir},upload_ttl_seconds=#{r.uploadTtlSeconds},view_ttl_seconds=#{r.viewTtlSeconds},max_upload_bytes=#{r.maxUploadBytes},version=version+1,modify_date_time=CURRENT_TIMESTAMP WHERE id='PLATFORM' AND scope='PLATFORM' AND version=#{expected}")
+    @Update("UPDATE ai_storage_setting SET default_platform=#{r.defaultPlatform},legacy_null_platform=#{r.legacyNullPlatform},base_dir=#{r.baseDir},upload_ttl_seconds=#{r.uploadTtlSeconds},view_ttl_seconds=#{r.viewTtlSeconds},max_upload_bytes=#{r.maxUploadBytes},version=version+1,update_time=CURRENT_TIMESTAMP WHERE id='PLATFORM' AND scope='PLATFORM' AND version=#{expected}")
     int update(@Param("r")StorageSettingsEntity row,@Param("expected")long expected);
 }

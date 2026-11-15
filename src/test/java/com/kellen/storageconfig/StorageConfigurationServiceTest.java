@@ -28,7 +28,7 @@ class StorageConfigurationServiceTest {
     @BeforeEach void setup() throws Exception {
         var ds=new DriverManagerDataSource("jdbc:h2:mem:storage_service_"+UUID.randomUUID()+";MODE=PostgreSQL;DB_CLOSE_DELAY=-1","sa","");
         new ResourceDatabasePopulator(new ClassPathResource("storage-schema.sql")).execute(ds);
-        jdbc=new JdbcTemplate(ds);jdbc.execute("CREATE TABLE ai_file_object(id BIGINT,storage_platform VARCHAR(128),is_delete BOOLEAN)");
+        jdbc=new JdbcTemplate(ds);jdbc.execute("CREATE TABLE ai_file_object(id BIGINT,storage_platform VARCHAR(128),is_deleted BOOLEAN)");
         var c=new MybatisConfiguration();c.setMapUnderscoreToCamelCase(true);
         c.addMapper(StorageConfigurationRepository.class);c.addMapper(StorageSettingsRepository.class);c.addMapper(StorageOperationRepository.class);
         var f=new MybatisSqlSessionFactoryBean();f.setDataSource(ds);f.setConfiguration(c);var session=new SqlSessionTemplate(f.getObject());
