@@ -36,7 +36,7 @@ public class ModelControlPlaneController {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> rejected(ResponseStatusException exception) {
         ReturnCode code = exception.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value()
-                ? ReturnCode.用户身份校验失败 : ReturnCode.无权限使用;
+                ? ReturnCode.USER_AUTHENTICATION_FAILED : ReturnCode.PERMISSION_DENIED;
         return ResponseEntity.status(exception.getStatusCode()).cacheControl(CacheControl.noStore())
                 .body(ApiResponse.fail(code));
     }

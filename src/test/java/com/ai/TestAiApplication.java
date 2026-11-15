@@ -26,7 +26,7 @@ import org.springframework.context.annotation.FilterType;
  * AI 服务测试启动配置。
  *
  * <p>生产启动类完整接入 utils 动态数据源和外部基础设施；测试只验证 AI 业务上下文，
- * 因此排除 Seata 数据源代理和 ES 请求日志组件，使用 H2 内存库完成业务测试。</p>
+ * 因此排除 Seata 数据源代理与 Redis 组件，使用 H2 内存库完成业务测试。</p>
  */
 @SpringBootConfiguration
 @EnableAutoConfiguration(exclude = {
@@ -49,12 +49,8 @@ import org.springframework.context.annotation.FilterType;
                 pattern = {
                         "com\\.kellen\\.AiApplication",
                         "com\\.kellen\\.aliyun\\..*",
-                        "com\\.kellen\\.config\\.actuator\\..*",
                         "com\\.kellen\\.config\\.datasource\\..*",
-                        "com\\.kellen\\.config\\.elasticsearch\\..*",
-                        "com\\.kellen\\.config\\.redis\\..*",
-                        "com\\.kellen\\.log\\..*",
-                        "com\\.kellen\\.aop\\.RequestRequiredAspect"
+                        "com\\.kellen\\.config\\.redis\\..*"
                 }
         )
 )
