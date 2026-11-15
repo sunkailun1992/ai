@@ -55,8 +55,6 @@ spring:
       - "optional:nacos:swagger.yaml?refreshEnabled=true"
       # ai-spring.yaml：本服务统一配置，包含框架/数据源与服务专属参数；原有共享配置覆盖顺序保持不变。
       - "optional:nacos:ai-spring.yaml?refreshEnabled=true"
-      # qdrant.yaml：Qdrant 向量数据库连接配置，保留为可随时启用的向量库能力；是否实际连接由代码和开关控制。
-      - "optional:nacos:qdrant.yaml?refreshEnabled=true"
       # mybatis-plus.yaml：MyBatis-Plus 通用行为配置。
       - "optional:nacos:mybatis-plus.yaml?refreshEnabled=true"
       # redis.yaml：Redis 连接配置。
@@ -65,5 +63,3 @@ spring:
       - "optional:nacos:seata.yaml?refreshEnabled=true"
       # dubbo.yaml：Dubbo RPC、注册中心和协议配置。
       - "optional:nacos:dubbo.yaml?refreshEnabled=true"
-      # a2a.yaml：Nacos AI Registry / A2A AgentCard 公共入口配置。
-      - "optional:nacos:a2a.yaml?refreshEnabled=true"

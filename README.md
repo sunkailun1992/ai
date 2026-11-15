@@ -2,7 +2,7 @@
 
 `ai` 是 AI 患者分析助手的主业务服务，基于 Java 21、Spring Boot、Spring Cloud Alibaba、Nacos 3.x、MyBatis-Plus 和 Gradle Wrapper 构建。
 
-个人公共包固定为 `com:utils:1.6.7`，跨服务契约固定为 `com:rpc-api:1.0.9`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
+个人公共包固定为 `com:utils:1.6.8`，跨服务契约固定为 `com:rpc-api:1.0.9`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
 
 本服务只负责User 认证入口编排、文件 token、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
 
@@ -102,7 +102,7 @@ ai:
 - `ai.qwen.*`
 - `ai.agent-client.base-url`
 
-`qdrant.yaml` 保留 Qdrant 向量数据库连接参数；保留连接配置不等于默认启用主服务本地 RAG 或 Spring AI VectorStore 调用链，新增向量库操作必须有明确业务入口和开关。
+主服务不直连 Qdrant，`qdrant.yaml` 已退役删除；知识检索通过 `rag` 服务的 RPC 完成，新增向量库操作必须有明确业务入口和开关。
 
 如果 Nacos AI Registry 没有发布对应 AgentCard，主服务应显式失败，不允许静默绕回本地模型执行。
 

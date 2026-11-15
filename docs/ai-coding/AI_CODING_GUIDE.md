@@ -28,19 +28,17 @@
 - `logging.yml`
 - `reuse-configuration.yaml`
 - `traffic-governance.yaml`
+- `actuator.yaml`
+- `security-jwt.yaml`
 - `swagger.yaml`
-- `ai.yaml`
 - `ai-spring.yaml`
-- `qdrant.yaml`
 - `mybatis-plus.yaml`
 - `redis.yaml`
-- `rabbitmq.yaml`
-- `elasticsearch.yaml`
 - `seata.yaml`
 - `dubbo.yaml`
-- `a2a.yaml`
+- `local-canary.yaml`（仅 dev profile）
 
-`ai.yaml` 必须配置：
+`ai-spring.yaml`（原 `ai.yaml` 已合并进来）必须配置：
 
 - `ai.agent-client.timeout`
 - `ai.agent-registry.enabled`
@@ -50,7 +48,6 @@
 - `ai.agent-registry.patient-analysis-agent-name`
 - `ai.dialogue.*`
 - `ai.wechat.*`
-- `ai.oss.*`
 
 不再配置：
 
@@ -61,7 +58,7 @@
 - `ai.qwen.*`
 - `system_parameter.ai_provider`
 
-`qdrant.yaml` 允许保存 Qdrant 连接参数；这不允许主服务默认注入 Spring AI VectorStore 或绕过 Agent 体系执行本地 RAG。
+主服务不导入 Qdrant 连接配置（`qdrant.yaml` 已退役删除）；不允许主服务默认注入 Spring AI VectorStore 或绕过 Agent 体系执行本地 RAG。
 
 ## 4. 分层规则
 
