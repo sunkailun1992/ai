@@ -46,7 +46,7 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
     @Test
     void migratesEmptySchemaToLatestVersion() throws Exception {
         assertThat(migrate(null).success).isTrue();
-        assertThat(appliedVersions()).containsExactly("1", "2", "3", "4", "5");
+        assertThat(appliedVersions()).containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(strings("SELECT table_name FROM information_schema.tables WHERE table_schema = '" + schema
                 + "' AND table_type = 'BASE TABLE' AND table_name NOT IN ('undo_log', 'flyway_schema_history') ORDER BY 1"))
                 .containsExactlyElementsOf(TABLES).doesNotContainAnyElementsOf(UNUSED_TABLES);
@@ -56,13 +56,9 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
                             "label", "sorting", "version", "tenant_id")
                     .doesNotContain("create_date_time", "modify_date_time", "create_name", "modify_name", "is_delete");
         }
-        for (String table : STORAGE_TABLES) {
-            assertThat(columns(table)).as(table).doesNotContain("create_dept");
-        }
         assertThat(strings("SELECT table_name FROM information_schema.columns WHERE table_schema = '" + schema
                 + "' AND column_name = 'create_dept' AND data_type = 'character varying' AND character_maximum_length = 64"
-                + " AND is_nullable = 'YES' ORDER BY 1"))
-                .containsExactlyElementsOf(TABLES.stream().filter(table -> !STORAGE_TABLES.contains(table)).toList());
+                + " AND is_nullable = 'YES' ORDER BY 1")).containsExactlyElementsOf(TABLES);
         for (String table : STORAGE_TABLES) {
             assertThat(dataType(table, "create_time")).as(table).isEqualTo("timestamp without time zone");
             assertThat(dataType(table, "update_time")).as(table).isEqualTo("timestamp without time zone");
@@ -74,6 +70,21 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
                 + "' AND table_name = 'ddl_history'")).isZero();
         assertThat(number("SELECT count(*) FROM information_schema.tables WHERE table_schema = '" + schema
                 + "' AND table_name = 'undo_log'")).isEqualTo(1);
+    }
+
+    /** 每张表都必须有的全部基础字段；undo_log 与 Flyway 记录表是框架表，除外。 */
+    private static final List<String> BASE_COLUMNS = List.of("id", "code", "description", "create_time", "creator",
+            "update_time", "updater", "is_deleted", "label", "sorting", "version", "tenant_id", "create_dept");
+
+    @Test
+    void everyTableHasAllBaseColumns() throws Exception {
+        migrate(null);
+        List<String> tables = strings("SELECT table_name FROM information_schema.tables WHERE table_schema = '" + schema
+                + "' AND table_type = 'BASE TABLE' AND table_name NOT IN ('undo_log', 'flyway_schema_history') ORDER BY 1");
+        assertThat(tables).isNotEmpty();
+        for (String table : tables) {
+            assertThat(columns(table)).as(table).containsAll(BASE_COLUMNS);
+        }
     }
 
     @Test
@@ -122,7 +133,7 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
         migrate("4");
         execute("INSERT INTO ai_chat_memory(id, conversation_id, message_type, content, label, sorting) VALUES (900002, 'fixture-conversation', 'USER', 'synthetic', 'kept', 7)");
         migrate(null);
-        assertThat(appliedVersions()).containsExactly("1", "2", "3", "4", "5");
+        assertThat(appliedVersions()).containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(number("SELECT count(*) FROM ai_chat_memory WHERE id = 900002 AND label = 'kept' AND sorting = 7"
                 + " AND create_dept IS NULL")).isEqualTo(1);
         assertThat(strings("SELECT col_description(('" + schema + ".ai_chat_memory')::regclass, ordinal_position::int)"

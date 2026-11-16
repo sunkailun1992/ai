@@ -65,7 +65,7 @@
 - 既有私有文件展示仅通过 `/api/v1/files/{fileId}/view?token=...`（或 `/api/files` 别名），先校验展示 token，再按已保存平台签名；不提供普通 User 直传登记或文件 owner 管理 API。
 - 文件展示和 AI 多模态附件 URL 必须使用后端令牌地址 `/api/v1/files/{fileId}/view?token=...`；后端校验 token 后再生成短时签名对象存储 URL，HEAD 请求必须返回真实 Content-Type 供多模态校验器使用。
 - 新增或修改 MyBatis-Plus 实体时，必须新增 Flyway 迁移（含字段中文注释）并同步 `src/test/resources/schema.sql`，补齐相应测试。字段含义要能直接支撑数据库查看和外部系统对接。
-- 新增业务表必须补齐公共治理字段；数据库列 `version` 只做乐观锁，Prompt、模板、协议等业务版本使用 `prompt_version`、`template_version`、`protocol_version` 等明确列名。
+- 每张新建表都必须包含全部基础字段 `id`、`code`、`description`、`create_time`、`creator`、`update_time`、`updater`、`is_deleted`、`label`、`sorting`、`version`、`tenant_id`、`create_dept`，不得省略，迁移不删除这些列；平台级配置表的 `tenant_id` 用固定值（如 `PLATFORM`）。数据库列 `version` 只做乐观锁，Prompt、模板、协议等业务版本使用 `prompt_version`、`template_version`、`protocol_version` 等明确列名。
 - 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。AI 实体继承 `AiGovernanceEntity`（承接 `updateTime` 与插入时自动填的 `createDept`）并保持物理删除，不继承带 `@TableLogic` 的实体基类。
 - 多模态附件只能使用配置白名单协议，默认 `http` / `https`；文件、图片、PDF、JSON 材料必须先上传到业务文件服务或对象存储，再把可访问 URL 传入 `attachments`。
 - 新增模型 Provider、记忆策略、多模态校验、审计或响应结构时，必须优先沿用 `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md` 中的 Provider、Application Service、Strategy、Adapter、Validator、Repository 等既有模式。

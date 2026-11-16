@@ -398,7 +398,8 @@ CREATE TABLE IF NOT EXISTS ai_storage_configuration (
     updater VARCHAR(255), is_deleted BOOLEAN NOT NULL DEFAULT false,
     type INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 1,
     label VARCHAR(255), sorting INTEGER NOT NULL DEFAULT 0,
-    version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM'
+    version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM',
+    create_dept VARCHAR(64)
 );
 CREATE TABLE IF NOT EXISTS ai_storage_setting (
     id VARCHAR(16) PRIMARY KEY CHECK (id='PLATFORM'), scope VARCHAR(16) NOT NULL CHECK (scope='PLATFORM'),
@@ -412,7 +413,8 @@ CREATE TABLE IF NOT EXISTS ai_storage_setting (
     updater VARCHAR(255), is_deleted BOOLEAN NOT NULL DEFAULT false,
     type INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 1,
     label VARCHAR(255), sorting INTEGER NOT NULL DEFAULT 0,
-    version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM'
+    version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM',
+    create_dept VARCHAR(64)
 );
 INSERT INTO ai_storage_setting(id,scope,base_dir,upload_ttl_seconds,view_ttl_seconds,max_upload_bytes,version)
 SELECT 'PLATFORM','PLATFORM','ai-files',60,1800,52428800,0
@@ -429,6 +431,7 @@ CREATE TABLE IF NOT EXISTS ai_storage_operation (
     type INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 1,
     label VARCHAR(255), sorting INTEGER NOT NULL DEFAULT 0,
     version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM'
-, UNIQUE(actor_id,request_id)
+, UNIQUE(actor_id,request_id),
+    create_dept VARCHAR(64)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_storage_probe ON ai_storage_operation(configuration_id,action,started_at);
