@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS ai_file_object (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '1'
+    tenant_id varchar(64) NOT NULL DEFAULT '1',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_chat_conversation (
@@ -141,7 +142,8 @@ CREATE TABLE IF NOT EXISTS ai_chat_memory (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '1'
+    tenant_id varchar(64) NOT NULL DEFAULT '1',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_chat_memory_summary (
@@ -163,7 +165,8 @@ CREATE TABLE IF NOT EXISTS ai_chat_memory_summary (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '100'
+    tenant_id varchar(64) NOT NULL DEFAULT '100',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_patient_memory (
@@ -197,7 +200,8 @@ CREATE TABLE IF NOT EXISTS ai_patient_memory (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '100'
+    tenant_id varchar(64) NOT NULL DEFAULT '100',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_chat_message (
@@ -224,7 +228,8 @@ CREATE TABLE IF NOT EXISTS ai_chat_message (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '1'
+    tenant_id varchar(64) NOT NULL DEFAULT '1',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_role_prompt (
@@ -249,7 +254,8 @@ CREATE TABLE IF NOT EXISTS ai_role_prompt (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '1'
+    tenant_id varchar(64) NOT NULL DEFAULT '1',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_model_selection (
@@ -270,7 +276,8 @@ CREATE TABLE IF NOT EXISTS ai_model_selection (
     label varchar(255),
     sorting int DEFAULT 0,
     version int DEFAULT 1,
-    tenant_id varchar(64) NOT NULL DEFAULT '1'
+    tenant_id varchar(64) NOT NULL DEFAULT '1',
+    create_dept varchar(64)
 );
 
 CREATE TABLE IF NOT EXISTS ai_questionnaire_template (

@@ -2,7 +2,7 @@ package com.kellen.auth;
 
 import com.kellen.conversation.AiDialogueService;
 import com.kellen.file.AiFileObjectEntity;
-import com.kellen.file.OssFileService;
+import com.kellen.file.FileViewService;
 import com.kellen.exception.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -137,8 +137,8 @@ class RetiredClientEndpointsHttpTest {
         }
         @Bean AiDialogueService dialogue() { return mock(AiDialogueService.class); }
         @Bean AiRequestIdentityResolver identities() { return mock(AiRequestIdentityResolver.class); }
-        @Bean OssFileService files() {
-            var service = mock(OssFileService.class);
+        @Bean FileViewService files() {
+            var service = mock(FileViewService.class);
             var file = new AiFileObjectEntity();
             ReflectionTestUtils.setField(file, "mimeType", "image/png");
             ReflectionTestUtils.setField(file, "fileSizeBytes", 12L);

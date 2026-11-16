@@ -1,7 +1,7 @@
 package com.kellen.storageconfig;
 
 import com.kellen.storage.PrivateObjectStorageService;
-import com.kellen.aliyun.oss.token.OssUploadPolicy;
+import com.kellen.storage.UploadPolicy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
@@ -35,7 +35,7 @@ public class ManagedPrivateStorage {
         Upload(String platform,StorageSettingsEntity settings,StorageRuntimeRegistry.Lease lease){this.platform=platform;this.settings=settings;this.lease=lease;}
         public String platform(){return platform;}
         public long maxUploadBytes(){return settings.maxUploadBytes;}
-        public OssUploadPolicy policy(String owner,String type,String mime,String name){
+        public UploadPolicy policy(String owner,String type,String mime,String name){
             try{return adapter().createUploadPolicy(owner,type,mime,name,settings.baseDir,settings.uploadTtlSeconds,settings.viewTtlSeconds,settings.maxUploadBytes);}
             catch(Exception ignored){throw new StorageFailure("STORAGE_WRITE_FAILED",503);}
         }

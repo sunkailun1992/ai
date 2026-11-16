@@ -54,7 +54,7 @@ import static org.mockito.Mockito.*;
 @Import(PrivateStorageMetadataPersistenceTest.Crypto.class)
 class PrivateStorageMetadataPersistenceTest {
     @Autowired AiFileObjectRepository repository;
-    @Autowired OssFileService service;
+    @Autowired FileViewService service;
     @MockitoBean PrivateObjectStorageService storage;
     @MockitoBean StorageRuntimeRegistry.Factory factory;
     @Autowired StorageCredentialCipher cipher;

@@ -18,9 +18,9 @@ import java.net.URI;
 @RestController
 @RequestMapping({"/api/v1/files", "/api/files"})
 public class FileObjectController {
-    private final OssFileService fileService;
+    private final FileViewService fileService;
 
-    public FileObjectController(OssFileService fileService) {
+    public FileObjectController(FileViewService fileService) {
         this.fileService = fileService;
     }
 

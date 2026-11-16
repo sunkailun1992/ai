@@ -1,6 +1,6 @@
 package com.kellen.file;
 
-import com.kellen.aliyun.oss.token.OssTokenUtils;
+import com.kellen.storage.DisplayTokenUtils;
 import com.kellen.storageconfig.ManagedPrivateStorage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,11 +9,11 @@ import java.net.URI;
 
 /** 既有私有文件的只读 token 校验与签名；平台解析始终使用加密 DB registry。 */
 @Service
-public class OssFileService {
+public class FileViewService {
     private final AiFileObjectRepository fileObjectRepository;
     private final ManagedPrivateStorage managed;
 
-    public OssFileService(AiFileObjectRepository fileObjectRepository, ManagedPrivateStorage managed) {
+    public FileViewService(AiFileObjectRepository fileObjectRepository, ManagedPrivateStorage managed) {
         this.fileObjectRepository = fileObjectRepository;
         this.managed = managed;
     }
@@ -23,7 +23,7 @@ public class OssFileService {
     public AiFileObjectEntity viewableFile(Long fileId, String displayToken) {
         AiFileObjectEntity entity = fileObjectRepository.findByIdAndStatus(fileId, AiFileObjectEntity.STATUS_ACTIVE)
                 .orElseThrow(() -> new IllegalArgumentException("文件不存在或已失效"));
-        if (!OssTokenUtils.matchesDisplayToken(displayToken, entity.getDisplayTokenHash())) {
+        if (!DisplayTokenUtils.matches(displayToken, entity.getDisplayTokenHash())) {
             throw new IllegalArgumentException("文件展示 token 无效");
         }
         return entity;

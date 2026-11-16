@@ -2,12 +2,23 @@ package com.kellen.database;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
+import com.baomidou.mybatisplus.core.metadata.TableInfo;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.kellen.agent.AiModelSelectionEntity;
+import com.kellen.audit.ChatMessageEntity;
+import com.kellen.file.AiFileObjectEntity;
 import com.kellen.memory.AiChatMemoryRepository;
+import com.kellen.memory.ChatMemoryEntity;
+import com.kellen.memory.ChatMemorySummaryEntity;
+import com.kellen.memory.PatientMemoryEntity;
+import com.kellen.prompt.AiRolePromptEntity;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +38,11 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
 
     private static final List<String> STORAGE_TABLES = List.of("ai_storage_configuration", "ai_storage_operation", "ai_storage_setting");
 
+    /** 继承 AiGovernanceEntity 的 7 张表；插入时自动填创建部门。 */
+    private static final List<Class<?>> ENTITIES = List.of(ChatMemoryEntity.class, ChatMemorySummaryEntity.class,
+            ChatMessageEntity.class, AiFileObjectEntity.class, AiModelSelectionEntity.class, PatientMemoryEntity.class,
+            AiRolePromptEntity.class);
+
     @Test
     void migratesEmptySchemaToLatestVersion() throws Exception {
         assertThat(migrate(null).success).isTrue();
@@ -36,14 +52,17 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
                 .containsExactlyElementsOf(TABLES).doesNotContainAnyElementsOf(UNUSED_TABLES);
         for (String table : TABLES) {
             assertThat(columns(table)).as(table)
-                    .contains("id", "create_time", "update_time", "creator", "updater", "is_deleted", "tenant_id", "version")
-                    .doesNotContain("create_date_time", "modify_date_time", "create_name", "modify_name", "is_delete",
-                            "code", "label", "sorting");
+                    .contains("id", "code", "description", "create_time", "creator", "update_time", "updater", "is_deleted",
+                            "label", "sorting", "version", "tenant_id")
+                    .doesNotContain("create_date_time", "modify_date_time", "create_name", "modify_name", "is_delete");
         }
-        assertThat(columns("ai_role_prompt")).contains("description");
-        for (String table : TABLES.stream().filter(table -> !table.equals("ai_role_prompt")).toList()) {
-            assertThat(columns(table)).as(table).doesNotContain("description");
+        for (String table : STORAGE_TABLES) {
+            assertThat(columns(table)).as(table).doesNotContain("create_dept");
         }
+        assertThat(strings("SELECT table_name FROM information_schema.columns WHERE table_schema = '" + schema
+                + "' AND column_name = 'create_dept' AND data_type = 'character varying' AND character_maximum_length = 64"
+                + " AND is_nullable = 'YES' ORDER BY 1"))
+                .containsExactlyElementsOf(TABLES.stream().filter(table -> !STORAGE_TABLES.contains(table)).toList());
         for (String table : STORAGE_TABLES) {
             assertThat(dataType(table, "create_time")).as(table).isEqualTo("timestamp without time zone");
             assertThat(dataType(table, "update_time")).as(table).isEqualTo("timestamp without time zone");
@@ -59,7 +78,7 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
 
     @Test
     void storageAuditTimesKeepShanghaiWallClock() throws Exception {
-        migrate("4");
+        migrate("3");
         execute("INSERT INTO ai_storage_configuration(id, scope, platform, name, provider, endpoint, bucket, upload_enabled, key_id,"
                 + " nonce, ciphertext, credential_revision, config_revision, credential_updated_at, create_time, update_time)"
                 + " VALUES ('fixture-storage', 'PLATFORM', 'fixture-platform', 'fixture', 'MINIO', 'https://storage.invalid', 'fixture',"
@@ -89,13 +108,38 @@ class PostgresqlSchemaLiveTest extends PostgresqlSchemaFixture {
 
     @Test
     void dropUnusedTablesRefusesWhenATableStillHasRows() throws Exception {
-        migrate("4");
+        migrate("3");
         execute("INSERT INTO ai_integration_outbox(event_type, target_system, aggregate_type, aggregate_id, idempotency_key, payload_json, status)"
                 + " VALUES ('fixture', 'fixture', 'fixture', 'fixture', 'fixture-key', '{}', 'PENDING')");
         assertThatThrownBy(() -> migrate(null)).isInstanceOf(FlywayException.class);
-        assertThat(appliedVersions()).containsExactly("1", "2", "3", "4");
+        assertThat(appliedVersions()).containsExactly("1", "2", "3");
         assertThat(number("SELECT count(*) FROM information_schema.tables WHERE table_schema = '" + schema
                 + "' AND table_name = 'ai_integration_outbox'")).isEqualTo(1);
+    }
+
+    @Test
+    void createDeptIsAddedWithoutDroppingAnyColumnOrRow() throws Exception {
+        migrate("4");
+        execute("INSERT INTO ai_chat_memory(id, conversation_id, message_type, content, label, sorting) VALUES (900002, 'fixture-conversation', 'USER', 'synthetic', 'kept', 7)");
+        migrate(null);
+        assertThat(appliedVersions()).containsExactly("1", "2", "3", "4", "5");
+        assertThat(number("SELECT count(*) FROM ai_chat_memory WHERE id = 900002 AND label = 'kept' AND sorting = 7"
+                + " AND create_dept IS NULL")).isEqualTo(1);
+        assertThat(strings("SELECT col_description(('" + schema + ".ai_chat_memory')::regclass, ordinal_position::int)"
+                + " FROM information_schema.columns WHERE table_schema = '" + schema
+                + "' AND table_name = 'ai_chat_memory' AND column_name = 'create_dept'")).containsExactly("创建部门ID");
+    }
+
+    @Test
+    void everyEntityFieldMapsToAColumnOfItsTable() throws Exception {
+        migrate(null);
+        var assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "entity-columns");
+        for (Class<?> entity : ENTITIES) {
+            TableInfo info = TableInfoHelper.initTableInfo(assistant, entity);
+            List<String> mapped = new ArrayList<>(List.of(info.getKeyColumn()));
+            info.getFieldList().forEach(field -> mapped.add(field.getColumn()));
+            assertThat(columns(info.getTableName())).as(entity.getSimpleName()).containsAll(mapped);
+        }
     }
 
     @Test

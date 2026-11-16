@@ -82,7 +82,7 @@
 - `DbChatMemoryService`：保存主服务可控的普通对话文本记忆。
 - `MediaInputValidator`：校验附件 URL 数量、协议、Content-Type 和 MIME。
 - `ChatAuditService`：审计落库。
-- `OssFileService`：OSS token 上传和展示。
+- `FileViewService`：既有私有文件的展示 token 校验，再按文件保存的存储平台签名。
 
 ## 5. Agent 调用规则
 
@@ -102,13 +102,13 @@
 ## 7. 数据库规则
 
 - 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。
-- Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块的 `spring.datasource.dynamic.seata` 跟随 `seata.enabled`，Seata 开启时数据源创建阶段（早于 Flyway）就会检查该表，所以启用 Seata 前库里须已完成迁移。
+- Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。
 - H2 测试库结构 `src/test/resources/schema.sql`、`storage-schema.sql` 同步维护（测试启动类排除 Flyway，PostgreSQL 迁移由 `PostgresqlSchemaLiveTest` 在真库上验证）。
 - 测试环境使用 `src/test/resources/schema.sql`。
 - 数据库访问统一使用 MyBatis-Plus Repository。
 - 不拼接用户输入形成 SQL。
 - 新增字段必须同步 PostgreSQL DDL 注释和 H2 测试 schema。
-- 新增业务表默认包含 `id`、`create_time`、`update_time`、`creator`、`updater`、`is_deleted`、`tenant_id`，用乐观锁时加 `version`；`code`、`description`、`type`、`state`、`sorting` 按业务需要添加，不再使用 `label`。
+- 新增业务表默认包含公共治理列 `id`、`code`、`description`、`create_time`、`creator`、`update_time`、`updater`、`is_deleted`、`label`、`sorting`、`version`、`tenant_id`、`create_dept`；`type`、`state` 按业务需要添加。实体继承 `AiGovernanceEntity`，插入时自动填 `update_time` 与 `create_dept`。
 - 数据库列 `version` 只表示乐观锁版本号；Prompt、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
 - 现有 AI 业务表保留 `bigint` 自增主键和 `created_at` / `updated_at` 运行时字段，后续新增通用后台管理型业务表再优先继承 `EntityBase`。
 

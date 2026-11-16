@@ -25,8 +25,8 @@ spring:
       primary: master
       # 找不到指定数据源时直接报错，不悄悄回落到默认库。
       strict: true
-      # 跟随 Seata 总开关：开启时给每个池包 Seata AT 代理（库里须已有 undo_log）；关闭时不包，新空库首次启动由 Flyway 建表。
-      seata: ${seata.enabled:true}
+      # 固定开启 Seata AT，给每个池包 Seata 代理；新空库首次启动由 utils 在建池之前先执行 Flyway，建出 undo_log。
+      seata: true
       # Seata 代理模式，AT 依赖 undo_log。
       seata-mode: AT
       # 两个池共用的 Druid 参数；单位毫秒的注明毫秒。

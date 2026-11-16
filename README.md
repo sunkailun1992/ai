@@ -2,7 +2,7 @@
 
 `ai` 是 AI 患者分析助手的主业务服务，基于 Java 21、Spring Boot、Spring Cloud Alibaba、Nacos 3.x、MyBatis-Plus 和 Gradle Wrapper 构建。
 
-个人公共包固定为 `com:utils:1.6.9`，跨服务契约固定为 `com:rpc-api:1.0.9`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
+个人公共包固定为 `com:utils:1.7.0`，跨服务契约固定为 `com:rpc-api:1.0.9`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
 
 本服务只负责User 认证入口编排、文件 token、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
 
@@ -136,7 +136,7 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 - `ai_role_prompt`：患者分析等角色 Prompt。
 - `ai_file_object`：私有文件元数据、持久化存储平台和展示 token。
 
-表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。迁移为 V1 现有结构快照（含存储设置初始行，只在空库执行）、V2 删除 `ddl_history`、V3 审计列改名、V4 删除没人读写的列、V5 删除 8 张没人读写的空表并把存储三表的审计时间统一为 `timestamp(0)`；已有的库由 `baseline-on-migrate` 把版本 1 登记为基线。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块的 `spring.datasource.dynamic.seata` 跟随 `seata.enabled`，Seata 开启时数据源创建阶段（早于 Flyway）就会检查该表，所以启用 Seata 前库里须已完成迁移。个人空库不自动导入业务角色种子；Java 演示种子须显式设置 `ai.bootstrap.seed-demo-content=true`。快速业务回归使用 H2；PostgreSQL 差异另由真实 PG 测试验证。
+表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。迁移为 V1 现有结构快照（含存储设置初始行，只在空库执行）、V2 删除 `ddl_history`、V3 审计列改名、V4 删除没人读写的列、V5 删除 8 张没人读写的空表并把存储三表的审计时间统一为 `timestamp(0)`；已有的库由 `baseline-on-migrate` 把版本 1 登记为基线。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。个人空库不自动导入业务角色种子；Java 演示种子须显式设置 `ai.bootstrap.seed-demo-content=true`。快速业务回归使用 H2；PostgreSQL 差异另由真实 PG 测试验证。
 
 
 PostgreSQL 数据源用 dynamic-datasource 原生配置：`application.yml` 的 `spring.datasource.dynamic` 块放连接池与 Seata 参数，Nacos 的 `spring.datasource.dynamic.datasource.master/gray` 放地址与账号，驱动为 `org.postgresql.Driver`；JDBC URL 不带 `connectTimeout`、`socketTimeout`。字符字段使用 ICU `fleet_general_ci` 保留常用大小写、重音不敏感的等值、唯一键和 `LIKE` 查询；这不等于完整复刻 MySQL Unicode 权重或尾空格规则，迁移前必须检查唯一键碰撞和尾空格。PG 18 的 nondeterministic collation 支持 `LIKE`，不要将现有查询改成不支持该排序规则的 `ILIKE` 或正则匹配。

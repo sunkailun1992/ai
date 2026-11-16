@@ -50,7 +50,6 @@ import org.springframework.context.annotation.FilterType;
                 type = FilterType.REGEX,
                 pattern = {
                         "com\\.kellen\\.AiApplication",
-                        "com\\.kellen\\.aliyun\\..*",
                         "com\\.kellen\\.config\\.datasource\\..*",
                         "com\\.kellen\\.config\\.redis\\..*"
                 }
