@@ -108,7 +108,7 @@
 - 数据库访问统一使用 MyBatis-Plus Repository。
 - 不拼接用户输入形成 SQL。
 - 新增字段必须同步 PostgreSQL DDL 注释和 H2 测试 schema。
-- 每张新建表都必须包含全部基础字段 `id`、`code`、`description`、`create_time`、`creator`、`update_time`、`updater`、`is_deleted`、`label`、`sorting`、`version`、`tenant_id`、`create_dept`，不得省略；`type`、`state` 按业务需要添加。实体继承 `AiGovernanceEntity`，插入时自动填 `update_time` 与 `create_dept`。
+- 每张新建表都必须包含全部基础字段 `id`、`code`、`description`、`create_time`、`create_by`、`update_time`、`update_by`、`is_deleted`、`label`、`sorting`、`version`、`tenant_id`、`create_dept`，不得省略；`type`、`state` 按业务需要添加。实体继承 `AiGovernanceEntity`，插入时自动填 `update_time` 与 `create_dept`。
 - 数据库列 `version` 只表示乐观锁版本号；Prompt、接口协议等业务版本必须使用更明确的列名，例如 `prompt_version`、`template_version`、`protocol_version`。
 - 现有 AI 业务表保留 `bigint` 自增主键和 `created_at` / `updated_at` 运行时字段，后续新增通用后台管理型业务表再优先继承 `EntityBase`。
 
