@@ -1,7 +1,7 @@
 package com.kellen.audit;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.config.GlobalConfig;
+import com.baomidou.mybatisplus.core.toolkit.GlobalConfigUtils;
 import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
 import com.kellen.agent.AiAgentClient;
 import com.kellen.auth.AiRequestIdentity;
@@ -14,6 +14,8 @@ import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
 import com.kellen.rag.RagRetrievalClient;
+import com.kellen.security.SecurityUser;
+import com.kellen.security.UserContextHolder;
 import com.kellen.security.config.TenantProperties;
 import com.kellen.utils.context.TenantContextHolder;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -40,7 +42,9 @@ import reactor.core.scheduler.Schedulers;
 import javax.sql.DataSource;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,7 +53,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
-/** 真实 MyBatis INSERT：保留旧库默认租户 1，关闭插件也必须写入已验证调用租户。 */
+/** 真实 MyBatis INSERT：保留旧库默认租户 1，关闭插件也必须写入已验证调用租户；审计字段取本轮已认证用户。 */
 @SpringBootTest(classes = ChatAuditTenantPersistenceTest.Config.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {"spring.config.name=audit-tenant-isolated", "tenant.enabled=false",
@@ -81,6 +85,7 @@ class ChatAuditTenantPersistenceTest {
         worker.dispose();
         TenantContextHolder.clear();
         TenantContextHolder.clearIgnore();
+        UserContextHolder.clear();
     }
 
     enum Terminal { SUCCESS, FAILURE, CANCEL }
@@ -168,6 +173,68 @@ class ChatAuditTenantPersistenceTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ai_chat_message WHERE tenant_id = '1'", Integer.class)).isZero();
     }
 
+    @ParameterizedTest
+    @EnumSource(Terminal.class)
+    void auditColumnsRecordTheRequestingUserNotTheOneTheWorkerInherited(Terminal terminal) {
+        // 复用的 Reactor 线程早先继承了另一个用户（TTL 在建线程时复制）；收尾写库只能记本轮已认证用户。
+        var stale = new SecurityUser("prior-user", "prior", "prior-tenant", "prior-dept", "ALL", List.of(), List.of());
+        Mono.fromRunnable(() -> UserContextHolder.set(stale)).subscribeOn(worker).block(Duration.ofSeconds(2));
+        var requester = new SecurityUser("verified-user", "fixture", "tenant-a", "dept-a", "ALL", List.of(), List.of());
+        var identity = new AiRequestIdentity("verified-user", "tenant-a", "synthetic-token");
+        var request = new AiChatRequest("user-context-conversation", null, null, "source-other",
+                "synthetic-question", null, null, List.of(), List.of());
+        Flux<String> output = switch (terminal) {
+            case SUCCESS -> Flux.just("synthetic-answer");
+            case FAILURE -> Flux.error(new IllegalStateException("synthetic-failure"));
+            case CANCEL -> Flux.never();
+        };
+        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any())).thenReturn(output.publishOn(worker));
+        UserContextHolder.set(requester);
+        Flux<String> stream = dialogue.stream(request, identity);
+        switch (terminal) {
+            case SUCCESS -> stream.collectList().block(Duration.ofSeconds(2));
+            case FAILURE -> assertThatThrownBy(() -> stream.collectList().block(Duration.ofSeconds(2)))
+                    .isInstanceOf(IllegalStateException.class);
+            case CANCEL -> {
+                var subscription = stream.subscribe();
+                Mono.fromRunnable(subscription::dispose).subscribeOn(worker).block(Duration.ofSeconds(2));
+            }
+        }
+        assertThat(UserContextHolder.get()).isSameAs(requester);
+        Mono.fromRunnable(() -> assertThat(UserContextHolder.get()).isSameAs(stale))
+                .subscribeOn(worker).block(Duration.ofSeconds(2));
+        var row = jdbc.queryForMap("SELECT create_by, update_by, create_dept FROM ai_chat_message WHERE conversation_id = ?",
+                identity.conversationKey(request.conversationId()));
+        assertThat(java.util.Arrays.asList(row.get("create_by"), row.get("update_by"), row.get("create_dept")))
+                .containsExactly("verified-user", "verified-user", "dept-a");
+    }
+
+    @Test
+    void workersCreatedWhileSubscribingDoNotInheritTheEntryUser() {
+        // Reactor/Netty 的 worker 在首次订阅时才新建并按 TTL 复制当前线程的值；订阅期间不能带着入口用户。
+        var inherited = new AtomicReference<Object>("worker-not-started");
+        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any())).thenReturn(Flux.defer(() -> {
+                    Thread created = new Thread(() -> inherited.set(Optional.ofNullable(UserContextHolder.get())));
+                    created.start();
+                    try {
+                        created.join(2000);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return Flux.just("synthetic-answer");
+                }));
+        var requester = new SecurityUser("verified-user", "fixture", "tenant-a", "dept-a", "ALL", List.of(), List.of());
+        UserContextHolder.set(requester);
+        var request = new AiChatRequest("subscribe-conversation", null, null, "source-other",
+                "synthetic-question", null, null, List.of(), List.of());
+        assertThat(dialogue.stream(request, new AiRequestIdentity("verified-user", "tenant-a", "synthetic-token"))
+                .collectList().block(Duration.ofSeconds(2))).containsExactly("synthetic-answer");
+        assertThat(inherited.get()).isEqualTo(Optional.empty());
+        assertThat(UserContextHolder.get()).isSameAs(requester);
+    }
+
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "test.audit-tenant.fixture", havingValue = "true")
     @EnableConfigurationProperties(TenantProperties.class)
@@ -185,7 +252,9 @@ class ChatAuditTenantPersistenceTest {
                         system_prompt text, assistant_content text, media_summary text,
                         success boolean NOT NULL DEFAULT false, error_message varchar(1024),
                         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        create_by varchar(255),
                         update_time timestamp DEFAULT CURRENT_TIMESTAMP,
+                        update_by varchar(255),
                         create_dept varchar(64)
                     )
                     """);
@@ -195,8 +264,10 @@ class ChatAuditTenantPersistenceTest {
         @Bean SqlSessionFactory sqlSessionFactory(DataSource dataSource, TenantProperties tenant) throws Exception {
             var configuration = new MybatisConfiguration();
             configuration.setMapUnderscoreToCamelCase(true);
+            var global = GlobalConfigUtils.defaults().setMetaObjectHandler(new MyMetaObjectHandler(tenant));
+            // 全局配置按 putIfAbsent 登记：要在 addMapper 之前登记，否则 addMapper 先登记默认配置，填充器不生效。
+            GlobalConfigUtils.setGlobalConfig(configuration, global);
             configuration.addMapper(ChatMessageRepository.class);
-            var global = new GlobalConfig().setMetaObjectHandler(new MyMetaObjectHandler(tenant));
             var factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(dataSource); factory.setConfiguration(configuration); factory.setGlobalConfig(global);
             return factory.getObject();

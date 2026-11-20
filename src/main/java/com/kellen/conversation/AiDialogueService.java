@@ -11,6 +11,8 @@ import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
 import com.kellen.rag.RagRetrievalClient;
+import com.kellen.security.SecurityUser;
+import com.kellen.security.UserContextHolder;
 import com.kellen.traffic.CanaryContext;
 
 import io.opentelemetry.context.Context;
@@ -89,8 +91,10 @@ public class AiDialogueService {
         if (identity == null) return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
         Context entryParent = Context.current();
         CanaryContext.Snapshot canary = CanaryContext.get();
+        // 认证过滤器写入的本轮登录用户；收尾写库在 Reactor 线程上，审计字段（创建人、更新人、创建部门）要显式取它。
+        SecurityUser entryUser = UserContextHolder.get();
         return Flux.defer(() -> {
-            DialogueObservation observation = new DialogueObservation(entryParent, identity);
+            DialogueObservation observation = new DialogueObservation(entryParent, identity, entryUser);
             Flux<String> execution;
             // 整轮 span 在 RAG/记忆预取前建立，Scope 仅覆盖当前线程的装配与订阅。
             try (Scope ignored = observation.span.makeCurrent(); var tenant = identity.bindTenant()) {
@@ -106,9 +110,10 @@ public class AiDialogueService {
             }
             Flux<String> source = execution;
             Flux<String> scoped = Flux.from(subscriber -> {
-                // 这里只订阅 HTTP 流，不做业务 SQL。避免新建 Reactor worker 继承 TTL 租户；
+                // 这里只订阅 HTTP 流，不做业务 SQL。避免新建 Reactor worker 继承 TTL 租户与登录用户；
                 // 真正的预取及持久化动作分别在上面的装配 scope 和 observation.run 中显式绑定。
-                try (Scope ignored = observation.span.makeCurrent(); var tenant = AiRequestIdentity.suspendTenant()) {
+                try (Scope ignored = observation.span.makeCurrent(); var tenant = AiRequestIdentity.suspendTenant();
+                     var user = AiRequestIdentity.suspendUser()) {
                     source.subscribe(subscriber);
                 }
             });
@@ -222,11 +227,13 @@ public class AiDialogueService {
         private final io.opentelemetry.api.trace.Tracer tracer = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business");
         private final io.opentelemetry.api.trace.Span span;
         private final AiRequestIdentity identity;
+        private final SecurityUser entryUser;
         private final java.util.concurrent.atomic.AtomicBoolean ended = new java.util.concurrent.atomic.AtomicBoolean();
         private volatile boolean failed;
 
-        private DialogueObservation(Context parent, AiRequestIdentity identity) {
+        private DialogueObservation(Context parent, AiRequestIdentity identity, SecurityUser entryUser) {
             this.identity = identity;
+            this.entryUser = entryUser;
             span = tracer.spanBuilder("ai.dialogue.stream").setParent(parent).startSpan();
         }
 
@@ -251,8 +258,10 @@ public class AiDialogueService {
             }
         }
 
+        /** 收尾信号可能落在任意复用的 Reactor 线程：写库期间绑定本轮租户与入口用户，结束后恢复该线程原值。 */
         private void run(Runnable action) {
-            try (Scope ignored = span.makeCurrent(); var tenant = identity.bindTenant()) {
+            try (Scope ignored = span.makeCurrent(); var tenant = identity.bindTenant();
+                 var user = AiRequestIdentity.bindUser(entryUser)) {
                 action.run();
             }
         }

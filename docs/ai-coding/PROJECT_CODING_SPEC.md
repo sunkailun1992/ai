@@ -84,7 +84,7 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 ## 实体与 Repository
 
-- 实体用 MyBatis-Plus `@TableName` 映射。现有 AI 业务实体继承 `AiGovernanceEntity`（只映射自动填充的 `updateTime` 与插入时取登录用户部门的 `createDept`，保持物理删除）；存储控制面实体是独立的 `final class`。
+- 实体用 MyBatis-Plus `@TableName` 映射。现有 AI 业务实体继承 `AiGovernanceEntity`（映射自动填充的创建人 `createBy`、更新时间 `updateTime`、更新人 `updateBy` 与创建部门 `createDept`，保持物理删除；异步收尾写库须显式绑定本轮登录用户）；存储控制面实体是独立的 `final class`。
 - 数据访问接口命名为 `XxxRepository` 并加 `@Mapper`。普通实体继承 `AiBaseRepository<T>`，它在 `BaseMapper` 上保留 `save`、`findById` 等兼容语义；需要比较并更新、显式租户或平台范围时，在 Repository 上写注解 SQL（见存储控制面的三个 Repository）。
 - 不拼接用户输入形成 SQL，参数一律绑定。
 

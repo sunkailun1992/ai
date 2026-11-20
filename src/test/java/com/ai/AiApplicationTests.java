@@ -6,8 +6,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.kellen.agent.AiModelSelectionEntity;
 import com.kellen.agent.AiModelSelectionRepository;
+import com.kellen.security.SecurityUser;
+import com.kellen.security.UserContextHolder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +73,32 @@ class AiApplicationTests {
             assertThat(new tools.jackson.databind.ObjectMapper().writeValueAsString(loaded))
                     .doesNotContain("updateTime", "update_time");
         } finally {
+            if (entity.getId() != null) {
+                modelSelections.deleteById(entity.getId());
+            }
+        }
+    }
+
+    /** 创建人、更新人与创建部门一样由共享填充器按当前登录用户写入，也不进响应 JSON。 */
+    @Test
+    void mapperRecordsTheLoggedInUserAsCreatorAndUpdaterWithoutExposingThem() throws Exception {
+        AiModelSelectionEntity entity = AiModelSelectionEntity.create("pg-fixture-" + UUID.randomUUID(), "google");
+        try {
+            UserContextHolder.set(new SecurityUser("u-creator", "fixture", "t-1", "d-1", "ALL", List.of(), List.of()));
+            modelSelections.save(entity);
+            UserContextHolder.set(new SecurityUser("u-editor", "fixture", "t-1", "d-2", "ALL", List.of(), List.of()));
+            AiModelSelectionEntity loaded = modelSelections.findById(entity.getId()).orElseThrow();
+            loaded.setProvider("qwen");
+            modelSelections.save(loaded);
+            var row = jdbc.queryForMap(
+                    "SELECT create_by, update_by, create_dept FROM ai_model_selection WHERE id = ?", entity.getId());
+            assertThat(row.get("create_by")).isEqualTo("u-creator");
+            assertThat(row.get("update_by")).isEqualTo("u-editor");
+            assertThat(row.get("create_dept")).isEqualTo("d-1");
+            assertThat(new tools.jackson.databind.ObjectMapper().writeValueAsString(loaded))
+                    .doesNotContain("createBy", "create_by", "updateBy", "update_by");
+        } finally {
+            UserContextHolder.clear();
             if (entity.getId() != null) {
                 modelSelections.deleteById(entity.getId());
             }

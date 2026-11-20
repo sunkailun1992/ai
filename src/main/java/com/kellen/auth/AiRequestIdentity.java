@@ -1,5 +1,7 @@
 package com.kellen.auth;
 
+import com.kellen.security.SecurityUser;
+import com.kellen.security.UserContextHolder;
 import com.kellen.utils.context.TenantContextHolder;
 
 /** 已经 User 认证中心验证的不可变本轮身份；token 仅用于转发，禁止进入日志与正文。 */
@@ -53,6 +55,29 @@ public final class AiRequestIdentity {
         @Override public void close() {
             TenantContextHolder.setTenantId(previous);
             if (previousIgnore) TenantContextHolder.ignore(); else TenantContextHolder.clearIgnore();
+        }
+    }
+
+    /** 异步信号写库前绑定本轮入口处的登录用户（审计字段取它的用户与部门），关闭时恢复该线程原值。 */
+    public static UserScope bindUser(SecurityUser user) {
+        return new UserScope(user);
+    }
+
+    /** 纯异步订阅阶段不携带入口用户，防止此时新建的 worker 按 TTL 继承它，之后替别人的请求写库。 */
+    public static UserScope suspendUser() {
+        return new UserScope(null);
+    }
+
+    public static final class UserScope implements AutoCloseable {
+        private final SecurityUser previous = UserContextHolder.get();
+        private UserScope(SecurityUser user) {
+            apply(user);
+        }
+        @Override public void close() {
+            apply(previous);
+        }
+        private static void apply(SecurityUser user) {
+            if (user == null) UserContextHolder.clear(); else UserContextHolder.set(user);
         }
     }
 }
