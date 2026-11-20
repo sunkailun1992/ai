@@ -4,6 +4,7 @@
 
 ## 1. 总原则
 
+- 升级、选型和架构设计先查证主流做法：对照 GitHub 上多个同类主流项目的源码与文档，以多数做法为准，不以单个项目为准；同时查官方文档、RFC 与标准、NIST / OWASP 等权威指南和相关论文，在设计或说明里写明依据与来源。不为缩小改动范围或省事采用非主流的简化做法；确需缩小范围时，写清主流做法与简化做法的差别和代价，由维护者决定。
 - 先识别当前语言、框架和模块边界；本项目默认按 Java 21、Spring Boot 4、Nacos AI Registry、MyBatis-Plus 和 Gradle 生态落地。
 - 优先沿用项目已有结构：Controller、Service、Adapter、Validator、Repository、Entity、DTO。
 - 只有当模式能稳定隔离 Agent 发现、Prompt、记忆、审计、多模态校验或数据库访问时才引入。
