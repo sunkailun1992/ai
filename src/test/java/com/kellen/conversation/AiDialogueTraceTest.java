@@ -76,11 +76,11 @@ class AiDialogueTraceTest {
     }
 
     private Flux<String> assemble(Span parent, Flux<String> output) {
-        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(output);
         try (var ignored = parent.makeCurrent()) {
             return service.stream(new AiChatRequest("fixture", "synthetic-question", null),
-                    new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token"));
+                    com.ai.support.TestIdentities.of("synthetic-user", "tenant-a"));
         }
     }
 
@@ -235,7 +235,7 @@ class AiDialogueTraceTest {
         var canary = new CanaryContext.Snapshot(
                 new CanaryGrant("ai", "blue", Instant.parse("2099-01-01T00:00:00Z")), "synthetic-grant");
         when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+                any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             assertSame(canary, CanaryContext.get());
             return Flux.defer(() -> {
                 assertNull(CanaryContext.get());
@@ -245,7 +245,7 @@ class AiDialogueTraceTest {
 
         CanaryContext.set(canary);
         var request = new AiChatRequest("fixture", "synthetic-question", null);
-        var identity = new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token");
+        var identity = com.ai.support.TestIdentities.of("synthetic-user", "tenant-a");
         Flux<String> stream = service.stream(request, identity);
         CanaryContext.clear();
 
@@ -280,7 +280,7 @@ class AiDialogueTraceTest {
         var worker = Executors.newSingleThreadExecutor();
         try {
             for (String tenant : List.of("tenant-a", "tenant-b")) {
-                var identity = new com.kellen.auth.AiRequestIdentity("verified-user", tenant, "synthetic-token");
+                var identity = com.ai.support.TestIdentities.of("verified-user", tenant);
                 var request = new AiChatRequest("client-session", null, "patient", "source-other", "synthetic-question", null, null, List.of(), List.of());
                 doAnswer(call -> {
                     assertEquals(tenant, com.kellen.utils.context.TenantContextHolder.getTenantId());
@@ -288,10 +288,10 @@ class AiDialogueTraceTest {
                 }).when(rag).retrieveContext(any(), any());
                 doAnswer(call -> {
                             assertEquals("verified-user", call.getArgument(9)); assertEquals(tenant, call.getArgument(10));
-                            assertEquals("source-other", call.getArgument(11)); assertEquals("synthetic-token", call.getArgument(13));
+                            assertEquals("source-other", call.getArgument(11));
                             assertEquals(identity.conversationKey("client-session"), call.getArgument(0));
                             return Flux.just("synthetic-output");
-                        }).when(agent).patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                        }).when(agent).patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
                 worker.submit(() -> {
                     com.kellen.utils.context.TenantContextHolder.setTenantId("prior-worker");
                     try {

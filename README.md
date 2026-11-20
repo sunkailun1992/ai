@@ -2,9 +2,9 @@
 
 `ai` 是 AI 患者分析助手的主业务服务，基于 Java 21、Spring Boot、Spring Cloud Alibaba、Nacos 3.x、MyBatis-Plus 和 Gradle Wrapper 构建。
 
-个人公共包固定为 `com:utils:1.7.2`，跨服务契约固定为 `com:rpc-api:1.0.9`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
+个人公共包固定为 `com:utils:2.0.1`，跨服务契约固定为 `com:rpc-api:2.0.0`。个人与公司共用私有 Maven 地址，utils 分别使用 `com` 与 `com.kellen` group 隔离；Java 包名保持 `com.kellen.*`。
 
-本服务只负责User 认证入口编排、文件 token、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
+本服务只负责登录身份编排、文件 token、聊天记忆和调用审计。真实模型执行已经拆到 `ai-agent`，主服务通过 Nacos AI Registry 读取 AgentCard 后调用 Agent 接口，不再保留 Spring AI 模型客户端、本地 Qdrant RAG 执行链、本地 Provider 切换或本地模型兜底。`qdrant.yaml` 仍作为备用向量数据库连接配置由 profile 导入，便于后续显式开启向量库操作。
 
 代码分支只保留 `main`（正式主干）与短功能分支。分支不自动改变运行 profile；完整功能进入远端 main 并核对后，按本任务授权清理本地与远程功能分支，保护未合、其他 worktree 占用及长期分支。细则见 [分支管理规范](docs/ai-coding/BRANCHING_SPEC.md)。
 
@@ -180,13 +180,15 @@ PostgreSQL 启动修复补丁版本为 `1.6.4`，公共依赖精确固定 `com:u
 
 `1.7.6` 将公共依赖升到 `com:utils:1.6.7`：修复 Dubbo 上下文透传过滤器拿不到 Spring 绑定的灰度与租户配置（提供方误拒全部灰度授权、灰度实例不带授权也放行、自定义租户头名不生效），本服务代码不变。
 
+`1.9.0` 是第5阶段（不兼容）：公共依赖升到 `com:utils:2.0.1` 与 `com:rpc-api:2.0.0`，身份改由 Keycloak 资源服务器给出；删除旧会话 RPC 客户端、HMAC 服务签名（`X-Open-*`）与 `ai.agent-client.auth.*` 配置，调 ai-agent 改为令牌交换；控制器不再读 `Authorization` 头，三处平台管理门禁统一为 `ROLE_PLATFORM_SUPER_ADMIN` 加 `user:auth:manage`；profile 不再导入 `security-jwt.yaml`。需与 ai-agent 0.4.0、网关 BFF 一起切换。
+
 ### AI 可信身份与会话隔离
 
-`/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 现在要求个人 User 中心签发的有效 access JWT。AI 通过 `com:rpc-api:1.0.9` 的 `AuthSessionRpcService` 验证签名、issuer、有效期、access 类型、jti、撤销状态、tokenVersion、启用账号及有效租户授权。匿名、伪造用户/租户头及旧 opaque token 不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。
+`/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 要求 Keycloak（`github-dev` 域）签发、受众 `github-api` 的访问令牌。校验由 utils 2.0.x 的资源服务器完成（签发方、受众、有效期、只收 RS256），再经 Dubbo 向 user 服务取业务上下文（用户、活动租户、部门、权限码与角色，`X-Tenant-Id` 只能在用户所属租户里选）；停用用户与不可访问的租户返回 403。控制器经 `AiRequestIdentityResolver.current()` 取本轮身份，不读 `Authorization` 头。匿名、伪造用户/租户头与无效令牌不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。
 
 内部会话键为经过验证的租户、subject 和客户端原始 `conversationId` 的固定摘要。SSE 继续返回文本数据和既有 typed error，客户端每轮传同一个原始 ID，不能把内部键当作新的公开会话 ID；直接传 `fleet_...` 也会按当前身份重新隔离。
 
-本轮身份在入口捕获为不可变值，RAG 预取与异步审计回调只在当前执行线程绑定已验证租户并恢复旧状态；纯 HTTP 订阅阶段临时清空 ambient 租户，防止新 worker 继承伪造请求头。调用 Agent 时 token 只通过 Authorization header 转发，不能进入签名正文、DTO、日志或异常；Agent 独立复核后才使用其租户调用 Memory。源码测试、HTTP 测试与真实整链读回分别验收。
+本轮身份在入口捕获为不可变值（只含业务上下文，不含令牌），装配期的查询与写库、异步审计与记忆回调都在当前执行线程绑定本轮租户与用户并恢复旧状态，审计列的创建人、更新人与创建部门因此取登录用户；纯 HTTP 订阅阶段临时清空 ambient 租户与用户，防止新 worker 继承。调用 Agent 时由 utils 的出站过滤器做 RFC 8693 令牌交换（客户端注册 `github-ai-agent`：当前用户的令牌换成受众 `github-ai-agent`、`azp=github-ai` 的令牌），令牌只在 Authorization 头里，不进正文、日志或异常；令牌端点拒绝或超时（缺省读取 10 秒）时返回 `event:error` 的「[AI Agent 令牌获取失败] 请稍后重试」，不调用 Agent。目标地址只允许无嵌入凭据的 HTTP(S) 与两个已知接口路径。源码测试、HTTP 测试与真实整链读回分别验收。
 
 从 1.6.8 起，成功、失败和取消审计均由 `ChatAuditService` 接收本轮已验证身份，将其 `tenantId` 显式写入 `ai_chat_message.tenant_id`。身份缺失、租户为空或超出既有列的 64 字符边界时，在 SQL 前拒绝；不从来源分区、线程上下文或数据库默认租户补值。即使 `tenant.enabled=false`，审计仍保存实际调用租户。异步回调的租户绑定与上下文恢复继续保留，平台模型、Prompt、存储等全局配置的作用域不变。此次仅修复后续写入，不增加 DDL，也不推断或回填历史默认租户 `1` 的记录。真实 MyBatis/H2 PostgreSQL 模式回归保留数据库默认 `1`，覆盖 A/B 成功、失败、取消及 worker 复用；实际部署后的审计读回另行验收。
 

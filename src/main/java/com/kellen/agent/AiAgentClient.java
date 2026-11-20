@@ -1,6 +1,7 @@
 package com.kellen.agent;
 
 import com.kellen.config.AiAgentClientProperties;
+import com.kellen.security.oauth2.client.FleetOAuth2Clients;
 import com.kellen.traffic.CanaryContext;
 import com.kellen.traffic.CanaryGrant;
 import com.kellen.file.MediaInput;
@@ -11,7 +12,6 @@ import org.springframework.http.MediaType;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -20,61 +20,56 @@ import reactor.core.publisher.Flux;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 主 AI 服务调用独立 Agent 执行服务的 HTTP 客户端。
  *
- * <p>普通请求通过 Nacos AI Registry 解析 AgentCard，已授权的患者分析灰度请求使用专用 Gateway 入口。</p>
+ * <p>普通请求通过 Nacos AI Registry 解析 AgentCard，已授权的患者分析灰度请求使用专用 Gateway 入口。
+ * 每个请求都带 RFC 8693 令牌交换换来的访问令牌（客户端注册 {@value #AGENT_REGISTRATION}：当前用户的令牌换成受众
+ * {@code github-ai-agent} 的令牌）；没换到令牌就报错，不调用 ai-agent。目标地址只允许无嵌入凭据的 HTTP(S) 与两个已知接口路径，
+ * 注册中心里被篡改的地址拿不到令牌。</p>
  */
 @Service
 public class AiAgentClient {
 
     private static final Logger log = LoggerFactory.getLogger(AiAgentClient.class);
 
+    /** 调用 ai-agent 的出站客户端注册 ID（Nacos ai-spring.yaml 的 spring.security.oauth2.client.registration.github-ai-agent）。 */
+    public static final String AGENT_REGISTRATION = "github-ai-agent";
+
+    private static final String MODEL_PATH = "/api/agents/model";
+    private static final Set<String> MODEL_QUERY_KEYS = Set.of("provider");
+
     private final AiAgentClientProperties properties;
     private final AiAgentRegistryClient registryClient;
     private final AiModelSelectionService modelSelectionService;
     private final WebClient webClient;
-    private final AiAgentRequestSigner requestSigner;
     private final AiAgentCanaryRoute canaryRoute;
 
     /**
      * 构造 Agent HTTP 客户端。
      *
-     * @param properties     Agent 调用超时配置。
-     * @param registryClient         Nacos AI Agent Registry 客户端。
-     * @param modelSelectionService  当前模型选择服务。
+     * @param properties            Agent 调用超时配置。
+     * @param registryClient        Nacos AI Agent Registry 客户端。
+     * @param modelSelectionService 当前模型选择服务。
+     * @param oauth2Clients         utils 的出站令牌工具，按 {@value #AGENT_REGISTRATION} 注册做令牌交换。
+     * @param environment           灰度入口配置来源。
      */
     public AiAgentClient(AiAgentClientProperties properties,
                          AiAgentRegistryClient registryClient,
-                         AiModelSelectionService modelSelectionService) {
-        this(properties, registryClient, modelSelectionService, AiAgentRequestSigner.disabled());
-    }
-
-    /** Spring 运行时对全部 Agent 调用使用同一个专用服务签名边界。 */
-    public AiAgentClient(AiAgentClientProperties properties,
-                         AiAgentRegistryClient registryClient,
                          AiModelSelectionService modelSelectionService,
-                         AiAgentRequestSigner requestSigner) {
-        this(properties, registryClient, modelSelectionService, requestSigner, null);
-    }
-
-    @Autowired
-    public AiAgentClient(AiAgentClientProperties properties,
-                         AiAgentRegistryClient registryClient,
-                         AiModelSelectionService modelSelectionService,
-                         AiAgentRequestSigner requestSigner,
+                         FleetOAuth2Clients oauth2Clients,
                          Environment environment) {
         this.properties = properties;
         this.registryClient = registryClient;
         this.modelSelectionService = modelSelectionService;
-        this.webClient = WebClient.builder().build();
-        this.requestSigner = requestSigner;
+        this.webClient = WebClient.builder().filter(oauth2Clients.webClientFilter(AGENT_REGISTRATION)).build();
         this.canaryRoute = new AiAgentCanaryRoute(environment);
     }
 
     /**
-     * 调用患者分析 Agent 流式接口。
+     * 调用患者分析 Agent 流式接口。令牌交换以订阅时安全上下文里的当前用户为主体：要在 servlet 请求线程里订阅。
      *
      * @param conversationId  会话 ID。
      * @param provider        可选模型供应商覆盖，通常为空，由 Agent 自己配置。
@@ -104,16 +99,6 @@ public class AiAgentClient {
                                               String tenantId,
                                               String sourceTenantId,
                                               String patientId) {
-        return patientAnalysisStream(conversationId, provider, systemPrompt, message, instruction,
-                historyContext, ragContext, attachments, caller, userId, tenantId, sourceTenantId, patientId, null);
-    }
-
-    /** 转发已经认证的终端 token；只放 Authorization，签名正文仍绑定本轮用户和租户。 */
-    public Flux<String> patientAnalysisStream(String conversationId, String provider, String systemPrompt,
-                                              String message, String instruction, String historyContext,
-                                              String ragContext, List<MediaInput> attachments, String caller,
-                                              String userId, String tenantId, String sourceTenantId, String patientId,
-                                              String accessToken) {
         AgentChatRequest request = new AgentChatRequest(
                 text(conversationId),
                 effectiveProvider(provider),
@@ -132,13 +117,13 @@ public class AiAgentClient {
         );
         CanaryContext.Snapshot canary = CanaryContext.get();
         String url = canary == null ? endpointUrl(AiAgentRegistryClient.AgentOperation.PATIENT_ANALYSIS,
-                AiAgentCanaryRoute.PATIENT_ANALYSIS_PATH) : canaryRoute.url(canary, requestSigner.enabled());
+                AiAgentCanaryRoute.PATIENT_ANALYSIS_PATH) : canaryRoute.url(canary);
         return Flux.defer(() -> {
-            var outgoing = requestSigner.post(webClient, url, request);
+            var outgoing = webClient.post().uri(validatedUri(url, AiAgentCanaryRoute.PATIENT_ANALYSIS_PATH, Set.of()))
+                    .contentType(MediaType.APPLICATION_JSON).bodyValue(request);
             if (canary != null) {
                 outgoing.header(CanaryGrant.HEADER, canaryRoute.authorize(canary));
             }
-            if (StringUtils.hasText(accessToken)) outgoing.headers(headers -> headers.setBearerAuth(accessToken));
             return outgoing.header("X-AI-Stream-Protocol", "typed-sse-v1")
                     .accept(MediaType.TEXT_EVENT_STREAM).exchangeToFlux(response -> {
                 if (response.statusCode().isError()) {
@@ -182,16 +167,40 @@ public class AiAgentClient {
      * @return Agent 执行层模型信息。
      */
     public AgentModelResult model(String provider) {
-        String expectedPath = "/api/agents/patient-analysis/stream";
         UriComponentsBuilder url = UriComponentsBuilder
                 .fromUriString(siblingEndpointUrl(AiAgentRegistryClient.AgentOperation.PATIENT_ANALYSIS,
-                        expectedPath, "/api/agents/model"))
+                        AiAgentCanaryRoute.PATIENT_ANALYSIS_PATH, MODEL_PATH))
                 .queryParam("provider", effectiveProvider(provider));
-        return requestSigner.get(webClient, url)
+        return webClient.get().uri(validatedUri(url.encode().build().toUriString(), MODEL_PATH, MODEL_QUERY_KEYS))
                 .retrieve()
                 .bodyToMono(AgentModelResult.class)
                 .timeout(properties.timeout())
                 .block();
+    }
+
+    /** 令牌只发往无嵌入凭据的 HTTP(S) 地址上的已知接口；查询参数只许名单里的键。 */
+    private static URI validatedUri(String endpointUrl, String path, Set<String> queryKeys) {
+        final URI uri;
+        try {
+            uri = URI.create(endpointUrl);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Agent Registry 接口地址无效");
+        }
+        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null || uri.getUserInfo() != null || uri.getRawFragment() != null) {
+            throw new IllegalStateException("Agent Registry 接口仅允许无嵌入凭据的 HTTP(S) 地址");
+        }
+        if (!path.equals(uri.getRawPath())) {
+            throw new IllegalStateException("Agent Registry 接口路径不在允许范围");
+        }
+        if (uri.getRawQuery() != null) {
+            for (String parameter : uri.getRawQuery().split("&", -1)) {
+                if (!queryKeys.contains(parameter.split("=", 2)[0])) {
+                    throw new IllegalStateException("Agent Registry 查询参数不在允许范围");
+                }
+            }
+        }
+        return uri;
     }
 
     private String endpointUrl(AiAgentRegistryClient.AgentOperation operation, String expectedPath) {

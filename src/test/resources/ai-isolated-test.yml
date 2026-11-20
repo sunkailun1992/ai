@@ -1,0 +1,26 @@
+# 全量上下文测试（TestAiApplication，spring.config.name=ai-isolated-test）的资源服务器与出站令牌交换配置。
+# 与 Nacos ai-spring.yaml 同形；签发方与令牌端点用保留域名 keycloak.invalid，上下文启动时不访问，客户端密钥是测试值。
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://keycloak.invalid/realms/github-dev
+          jws-algorithms: RS256
+          audiences: github-api
+      client:
+        provider:
+          keycloak:
+            token-uri: https://keycloak.invalid/realms/github-dev/protocol/openid-connect/token
+        registration:
+          github-ai-agent:
+            provider: keycloak
+            client-id: github-ai
+            client-secret: fixture-ai-secret
+            authorization-grant-type: urn:ietf:params:oauth:grant-type:token-exchange
+fleet:
+  security:
+    oauth2:
+      token-exchange:
+        github-ai-agent:
+          audience: github-ai-agent

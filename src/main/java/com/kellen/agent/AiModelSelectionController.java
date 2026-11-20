@@ -3,7 +3,6 @@ package com.kellen.agent;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.server.ResponseStatusException;
 import com.kellen.conversation.AiChatResponse;
 import org.slf4j.Logger;
@@ -48,14 +47,12 @@ public class AiModelSelectionController {
     /**
      * 切换当前默认 Provider。
      *
-     * @param request 更新请求。
-     * @param authorization 已验证用户的 Bearer JWT。
+     * @param request 更新请求；只允许平台超级管理员（且有 user:auth:manage）写入。
      * @return 更新后的默认模型信息。
      */
     @PutMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public AiModelSelectionResponse update(@RequestBody AiModelSelectionUpdateRequest request,
-            @RequestHeader(value = "Authorization", required = false) String authorization) {
-        String provider = modelSelectionService.updateDefaultProvider(request.provider(), authorization);
+    public AiModelSelectionResponse update(@RequestBody AiModelSelectionUpdateRequest request) {
+        String provider = modelSelectionService.updateDefaultProvider(request.provider());
         return response(provider);
     }
 

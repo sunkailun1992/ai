@@ -200,7 +200,7 @@ class AiAgentStreamProtocolHttpTests {
                     new AiModelCallObserver(metrics), client, mock(RagRetrievalClient.class));
 
             Flux<String> output = dialogue.stream(new AiChatRequest("fixture", "synthetic-question", null),
-                            new AiRequestIdentity("synthetic-user", "synthetic-tenant", "synthetic-token"));
+                            com.ai.support.TestIdentities.of("synthetic-user", "synthetic-tenant"));
 
             assertThatThrownBy(() -> output.collectList().block(Duration.ofSeconds(5)))
                     .isInstanceOf(IllegalStateException.class);
@@ -260,7 +260,8 @@ class AiAgentStreamProtocolHttpTests {
         AiAgentRegistryClient registry = operation -> Optional.of(new AiAgentRegistryClient.AgentEndpoint(
                 "http://127.0.0.1:" + server.port() + "/api/agents/patient-analysis/stream", "http", "fixture"));
         return new AiAgentClient(new AiAgentClientProperties(Duration.ofSeconds(5), "qwen"),
-                registry, mock(AiModelSelectionService.class));
+                registry, mock(AiModelSelectionService.class), com.ai.support.AgentTokenFixture.fixedToken("fixture-agent-token"),
+                new org.springframework.mock.env.MockEnvironment());
     }
 
     private Flux<String> stream(AiAgentClient client) {

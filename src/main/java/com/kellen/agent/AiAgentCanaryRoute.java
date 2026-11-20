@@ -26,8 +26,8 @@ final class AiAgentCanaryRoute {
         signingKey = property(environment, "traffic.governance.canary.signing-key");
     }
 
-    String url(CanaryContext.Snapshot canary, boolean businessSigningEnabled) {
-        if (!businessSigningEnabled || !eligible(canary.grant()) || gateway.isEmpty()) {
+    String url(CanaryContext.Snapshot canary) {
+        if (!eligible(canary.grant()) || gateway.isEmpty()) {
             throw unavailable();
         }
         try {

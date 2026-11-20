@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -24,7 +23,7 @@ class ModelControlPlaneControllerTest {
             var administrator = mock(AiControlPlaneAdministrator.class);
             var service = mock(ModelControlPlaneService.class);
             doThrow(new ResponseStatusException(denied, "private-denial-canary"))
-                    .when(administrator).require(any());
+                    .when(administrator).require();
             var mvc = MockMvcBuilders.standaloneSetup(new ModelControlPlaneController(administrator, service)).build();
             mvc.perform(get("/api/ai/model-control-plane").header("Authorization", "Bearer synthetic-user-fixture"))
                     .andExpect(status().is(denied.value())).andExpect(jsonPath("$.success").value(false))
@@ -43,6 +42,6 @@ class ModelControlPlaneControllerTest {
                 .andExpect(jsonPath("$.data.status").value("NOT_CONFIGURED"))
                 .andExpect(jsonPath("$.data.modelCatalog").isEmpty())
                 .andExpect(header().string("Cache-Control", "no-store"));
-        verify(administrator).require("Bearer synthetic-user-fixture");
+        verify(administrator).require();
     }
 }

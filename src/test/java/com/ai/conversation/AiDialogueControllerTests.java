@@ -44,14 +44,14 @@ class AiDialogueControllerTests {
     void chatReturnsStreamedContent() {
         AiDialogueService dialogueService = mock(AiDialogueService.class); // Mock 业务服务，避免真实模型调用。
         var identities = mock(com.kellen.auth.AiRequestIdentityResolver.class);
-        var identity = new com.kellen.auth.AiRequestIdentity("synthetic-user", "tenant-a", "synthetic-token");
-        when(identities.requireIdentity("Bearer synthetic-token")).thenReturn(identity);
+        var identity = com.ai.support.TestIdentities.of("synthetic-user", "tenant-a");
+        when(identities.current()).thenReturn(identity);
         AiDialogueController controller = new AiDialogueController(dialogueService, identities);
         AiChatRequest request = new AiChatRequest("demo", "你好", null); // 构造纯文本流式请求。
 
         when(dialogueService.stream(request, identity)).thenReturn(Flux.just("你", "好"));
 
-        String content = controller.chat("Bearer synthetic-token", request).map(org.springframework.http.codec.ServerSentEvent::data).collectList().block().stream().reduce("", String::concat);
+        String content = controller.chat(request).map(org.springframework.http.codec.ServerSentEvent::data).collectList().block().stream().reduce("", String::concat);
 
         assertEquals("你好", content); // Controller 不改写流式内容。
         verify(dialogueService).stream(request, identity);

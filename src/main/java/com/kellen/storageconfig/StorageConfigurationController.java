@@ -16,19 +16,19 @@ public class StorageConfigurationController {
     private final AiControlPlaneAdministrator admins;
     private final StorageConfigurationService service;
     public StorageConfigurationController(AiControlPlaneAdministrator admins,StorageConfigurationService service){this.admins=admins;this.service=service;}
-    private String actor(String auth){return admins.require(auth).userId();}
-    @GetMapping("/storage-capabilities") public ResponseEntity<ApiResponse<Capabilities>> capabilities(@RequestHeader(value="Authorization",required=false)String auth){actor(auth);return ok(service.capabilities());}
-    @GetMapping("/storage-configurations") public ResponseEntity<ApiResponse<Page>> list(@RequestHeader(value="Authorization",required=false)String auth,
+    private String actor(){return admins.require().userId();}
+    @GetMapping("/storage-capabilities") public ResponseEntity<ApiResponse<Capabilities>> capabilities(){actor();return ok(service.capabilities());}
+    @GetMapping("/storage-configurations") public ResponseEntity<ApiResponse<Page>> list(
             @RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size,@RequestParam(required=false)String search,
-            @RequestParam(required=false)String provider,@RequestParam(required=false)Boolean uploadEnabled){actor(auth);return ok(service.list(page,size,search,provider,uploadEnabled));}
-    @GetMapping("/storage-configurations/{id}") public ResponseEntity<ApiResponse<Configuration>> get(@RequestHeader(value="Authorization",required=false)String auth,@PathVariable String id){actor(auth);return ok(service.configuration(id));}
-    @PostMapping("/storage-configurations") public ResponseEntity<ApiResponse<Operation>> create(@RequestHeader(value="Authorization",required=false)String auth,@RequestBody Create input){return response(201,service.create(actor(auth),input));}
-    @PutMapping("/storage-configurations/{id}") public ResponseEntity<ApiResponse<Operation>> update(@RequestHeader(value="Authorization",required=false)String auth,@PathVariable String id,@RequestBody Update input){return ok(service.update(actor(auth),id,input));}
-    @DeleteMapping("/storage-configurations/{id}") public ResponseEntity<ApiResponse<Operation>> delete(@RequestHeader(value="Authorization",required=false)String auth,@PathVariable String id,@RequestParam String requestId,@RequestParam Long expectedVersion){return ok(service.delete(actor(auth),id,requestId,expectedVersion));}
-    @GetMapping("/storage-settings") public ResponseEntity<ApiResponse<Settings>> settings(@RequestHeader(value="Authorization",required=false)String auth){actor(auth);return ok(service.settings());}
-    @PutMapping("/storage-settings") public ResponseEntity<ApiResponse<Operation>> settings(@RequestHeader(value="Authorization",required=false)String auth,@RequestBody UpdateSettings input){return ok(service.updateSettings(actor(auth),input));}
-    @PostMapping("/storage-configurations/{id}/probes") public ResponseEntity<ApiResponse<Operation>> probe(@RequestHeader(value="Authorization",required=false)String auth,@PathVariable String id,@RequestBody Probe input){return response(202,service.probe(actor(auth),id,input));}
-    @GetMapping("/storage-operations/{requestId}") public ResponseEntity<ApiResponse<Operation>> operation(@RequestHeader(value="Authorization",required=false)String auth,@PathVariable String requestId){return ok(service.operation(actor(auth),requestId));}
+            @RequestParam(required=false)String provider,@RequestParam(required=false)Boolean uploadEnabled){actor();return ok(service.list(page,size,search,provider,uploadEnabled));}
+    @GetMapping("/storage-configurations/{id}") public ResponseEntity<ApiResponse<Configuration>> get(@PathVariable String id){actor();return ok(service.configuration(id));}
+    @PostMapping("/storage-configurations") public ResponseEntity<ApiResponse<Operation>> create(@RequestBody Create input){return response(201,service.create(actor(),input));}
+    @PutMapping("/storage-configurations/{id}") public ResponseEntity<ApiResponse<Operation>> update(@PathVariable String id,@RequestBody Update input){return ok(service.update(actor(),id,input));}
+    @DeleteMapping("/storage-configurations/{id}") public ResponseEntity<ApiResponse<Operation>> delete(@PathVariable String id,@RequestParam String requestId,@RequestParam Long expectedVersion){return ok(service.delete(actor(),id,requestId,expectedVersion));}
+    @GetMapping("/storage-settings") public ResponseEntity<ApiResponse<Settings>> settings(){actor();return ok(service.settings());}
+    @PutMapping("/storage-settings") public ResponseEntity<ApiResponse<Operation>> settings(@RequestBody UpdateSettings input){return ok(service.updateSettings(actor(),input));}
+    @PostMapping("/storage-configurations/{id}/probes") public ResponseEntity<ApiResponse<Operation>> probe(@PathVariable String id,@RequestBody Probe input){return response(202,service.probe(actor(),id,input));}
+    @GetMapping("/storage-operations/{requestId}") public ResponseEntity<ApiResponse<Operation>> operation(@PathVariable String requestId){return ok(service.operation(actor(),requestId));}
     private <T> ResponseEntity<ApiResponse<T>> ok(T data){return response(200,data);}
     private <T> ResponseEntity<ApiResponse<T>> response(int status,T data){return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(ApiResponse.success(data));}
     @ExceptionHandler(StorageFailure.class) public ResponseEntity<SafeFailure> failure(StorageFailure e){return safe(e.status(),e.code());}

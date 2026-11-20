@@ -1,5 +1,8 @@
 package com.kellen.conversation;
 
+import com.ai.support.AgentTokenFixture;
+import com.ai.support.FixtureUsers;
+import com.ai.support.ResourceServerFixture;
 import com.kellen.agent.AiAgentClient;
 import com.kellen.agent.AiAgentRegistryClient;
 import com.kellen.agent.AiModelSelectionService;
@@ -12,7 +15,6 @@ import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
 import com.kellen.rag.RagRetrievalClient;
-import com.kellen.rpc.auth.AuthSessionIdentityRpcDTO;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
@@ -29,6 +31,7 @@ import org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfig
 import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -55,7 +58,7 @@ import static org.mockito.Mockito.when;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"spring.config.name=dialogue-error-isolated", "spring.cloud.nacos.config.enabled=false",
                 "spring.cloud.nacos.discovery.enabled=false", "spring.cloud.nacos.config.import-check.enabled=false",
-                "test.dialogue.error.fixture=true"})
+                "test.dialogue.error.fixture=true", ResourceServerFixture.ISSUER})
 class AiDialogueErrorHttpTest {
     @LocalServerPort int port;
     @Autowired Upstream upstream;
@@ -63,16 +66,18 @@ class AiDialogueErrorHttpTest {
     @Autowired DbChatMemoryService memory;
     @Autowired ChatAuditService audit;
     @Autowired RagRetrievalClient rag;
+    @Autowired FixtureUsers users;
     private HttpServer agent;
 
     @BeforeEach void startAgent() throws Exception {
+        users.put("synthetic-user", "synthetic-tenant", null);
         metrics.clear();
         clearInvocations(memory, audit);
         reset(rag);
         upstream.protocol = "typed-sse-v1";
         upstream.body = "event:error\ndata:synthetic-private-provider-error\n\n";
         agent = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        agent.createContext("/stream", exchange -> {
+        agent.createContext("/api/agents/patient-analysis/stream", exchange -> {
             exchange.getRequestBody().readAllBytes();
             exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
             if (upstream.protocol != null) exchange.getResponseHeaders().set("X-AI-Stream-Protocol", upstream.protocol);
@@ -81,7 +86,7 @@ class AiDialogueErrorHttpTest {
             try (var output = exchange.getResponseBody()) { output.write(bytes); }
         });
         agent.start();
-        upstream.url = "http://127.0.0.1:" + agent.getAddress().getPort() + "/stream";
+        upstream.url = "http://127.0.0.1:" + agent.getAddress().getPort() + "/api/agents/patient-analysis/stream";
     }
 
     @AfterEach void stopAgent() { agent.stop(0); }
@@ -90,7 +95,7 @@ class AiDialogueErrorHttpTest {
         var response = chat();
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("event:error", "data:[AI Agent 调用失败] 请稍后重试")
-                .doesNotContain("synthetic-private-provider-error", "synthetic-token");
+                .doesNotContain("synthetic-private-provider-error", ResourceServerFixture.accessToken("synthetic-user"));
         assertFailurePersistence();
     }
 
@@ -116,7 +121,7 @@ class AiDialogueErrorHttpTest {
         var response = chat();
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("event:error", "data:[灰度 RAG 检索不可用] 请稍后重试")
-                .doesNotContain("RAG_CANARY_UNAVAILABLE", "synthetic-token");
+                .doesNotContain("RAG_CANARY_UNAVAILABLE", ResourceServerFixture.accessToken("synthetic-user"));
         verify(audit, never()).recordSuccess(any(), any(), any(), any(), any(), any(), any(), any());
         verify(memory, never()).addMessage(any(), any(), any());
     }
@@ -132,7 +137,7 @@ class AiDialogueErrorHttpTest {
     private HttpResponse<String> chat() throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/ai/chat"))
                 .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json")
-                .header("Accept", "text/event-stream").header("Authorization", "Bearer synthetic-token")
+                .header("Accept", "text/event-stream").header("Authorization", ResourceServerFixture.bearer("synthetic-user"))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"conversationId\":\"fixture\",\"message\":\"synthetic-input\"}"));
         return HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
@@ -141,6 +146,7 @@ class AiDialogueErrorHttpTest {
 
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "test.dialogue.error.fixture", havingValue = "true")
+    @Import({ResourceServerFixture.class, AiRequestIdentityResolver.class})
     @ImportAutoConfiguration({TomcatServletWebServerAutoConfiguration.class, DispatcherServletAutoConfiguration.class,
             WebMvcAutoConfiguration.class, HttpMessageConvertersAutoConfiguration.class})
     static class Beans {
@@ -156,7 +162,8 @@ class AiDialogueErrorHttpTest {
             AiAgentRegistryClient registry = operation -> Optional.of(
                     new AiAgentRegistryClient.AgentEndpoint(upstream.url, "http", "fixture"));
             return new AiAgentClient(new AiAgentClientProperties(Duration.ofSeconds(5), "qwen"),
-                    registry, mock(AiModelSelectionService.class));
+                    registry, mock(AiModelSelectionService.class), AgentTokenFixture.fixedToken("fixture-agent-token"),
+                    new org.springframework.mock.env.MockEnvironment());
         }
         @Bean AiDialogueService dialogue(DbChatMemoryService memory, ChatAuditService audit,
                                         AiAgentClient client,
@@ -171,12 +178,6 @@ class AiDialogueErrorHttpTest {
             return new AiDialogueService(memory, media, audit, prompt,
                     patient, new AiModelCallObserver(metrics),
                     client, rag);
-        }
-        @Bean AiRequestIdentityResolver identities() {
-            return new AiRequestIdentityResolver(token -> {
-                var identity = new AuthSessionIdentityRpcDTO(); identity.setUserId("synthetic-user");
-                identity.setTenantId("synthetic-tenant"); return identity;
-            });
         }
         @Bean AiDialogueController controller(AiDialogueService dialogue, AiRequestIdentityResolver identities) {
             return new AiDialogueController(dialogue, identities);

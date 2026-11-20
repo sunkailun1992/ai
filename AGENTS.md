@@ -26,7 +26,7 @@
 - 项目类型：患者分析与多模态报告解读后端
 - 技术栈：Java 21、Spring Boot 4、Spring AI、Spring Cloud Alibaba、Nacos、Dubbo、MyBatis-Plus、PostgreSQL、Gradle Wrapper、`com:rpc-api`、`com:utils`
 - 外部模型：Google Gemini、DeepSeek/OpenAI-compatible、通义千问 DashScope/OpenAI-compatible（由 `ai-agent` 执行层配置）
-- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:1.7.2`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
+- Utils 制品隔离：本 GitHub 个人项目固定使用 `com:utils:2.0.1`；公司项目使用 `com.kellen:utils`。二者共用私有 Maven 地址，以 group 区分制品；Java 包名 `com.kellen.*` 不随 Maven group 改动。
 - 核心风险：模型 Provider 选错、医疗 Prompt 污染、外部媒体 URL SSRF、重新引入 AI 对话文件流入口、密钥泄露、患者资料越权、会话历史越权、日志输出用户隐私
 
 ## 修改前阅读顺序
@@ -66,10 +66,11 @@
 - 文件展示和 AI 多模态附件 URL 必须使用后端令牌地址 `/api/v1/files/{fileId}/view?token=...`；后端校验 token 后再生成短时签名对象存储 URL，HEAD 请求必须返回真实 Content-Type 供多模态校验器使用。
 - 新增或修改 MyBatis-Plus 实体时，必须新增 Flyway 迁移（含字段中文注释）并同步 `src/test/resources/schema.sql`，补齐相应测试。字段含义要能直接支撑数据库查看和外部系统对接。
 - 每张新建表都必须包含全部基础字段 `id`、`code`、`description`、`create_time`、`create_by`、`update_time`、`update_by`、`is_deleted`、`label`、`sorting`、`version`、`tenant_id`、`create_dept`，不得省略，迁移不删除这些列；平台级配置表的 `tenant_id` 用固定值（如 `PLATFORM`）。数据库列 `version` 只做乐观锁，Prompt、模板、协议等业务版本使用 `prompt_version`、`template_version`、`protocol_version` 等明确列名。
-- 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。AI 实体继承 `AiGovernanceEntity`（承接自动填充的 `createBy`、`updateTime`、`updateBy` 与 `createDept`）并保持物理删除，不继承带 `@TableLogic` 的实体基类。填充器按当前线程的登录用户取值：在 Reactor 等复用线程上写库时，必须像租户一样显式绑定本轮入口用户（`AiRequestIdentity.bindUser`），订阅外部流时先挂起（`suspendUser`），否则会记成该线程早先继承的用户。
+- 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。AI 实体继承 `AiGovernanceEntity`（承接自动填充的 `createBy`、`updateTime`、`updateBy` 与 `createDept`）并保持物理删除，不继承带 `@TableLogic` 的实体基类。填充器按当前线程的登录用户取值：在 Reactor 等复用线程上写库时，必须像租户一样显式绑定本轮身份（`identity.bindUser()`），订阅外部流时先挂起（`AiRequestIdentity.suspendUser()`），否则会记成该线程早先继承的用户。
 - 多模态附件只能使用配置白名单协议，默认 `http` / `https`；文件、图片、PDF、JSON 材料必须先上传到业务文件服务或对象存储，再把可访问 URL 传入 `attachments`。
 - 新增模型 Provider、记忆策略、多模态校验、审计或响应结构时，必须优先沿用 `docs/ai-coding/AI_DESIGN_PATTERN_GUIDE.md` 中的 Provider、Application Service、Strategy、Adapter、Validator、Repository 等既有模式。
 - 新增本服务对外 Controller、服务前缀，或新增后续独立 Agent 服务需要经网关访问时，必须同步评估 `../gateway` 的 Nacos `gateway-spring.yaml`；需要 Swagger UI 聚合的服务要先保证对应网关文档路径返回 200，再加入 `springdoc.swagger-ui.urls`。
+- 身份只来自资源服务器（utils 2.0.x：Keycloak 访问令牌加 user 服务给的业务上下文），经 `AiRequestIdentityResolver.current()` 取得；控制器不读 `Authorization` 头，不信任任何身份、租户或角色请求头。调 `ai-agent` 用 RFC 8693 令牌交换（客户端注册 `github-ai-agent`，utils `FleetOAuth2Clients`），不恢复 HMAC 服务签名；没换到令牌就报错、不调用 ai-agent。AI 业务控制面（存储配置、模型目录、默认模型）的门禁统一由 `AiControlPlaneAdministrator.require()` 判定：`ROLE_PLATFORM_SUPER_ADMIN` 且有 `user:auth:manage`。
 - 跨服务 Dubbo RPC 接口和 DTO 统一维护在同级 `../rpc-api`；`ai` 只实现或调用契约，不在本服务或 `utils` 复制接口定义。
 - 配置归属按业务控制面与基础设施区分：模型部署、上游密钥、虚拟密钥与额度以 LiteLLM 原生管理台为唯一源；AI 管理入口仅展示真实只读目录，不执行推理探针。存储 provider/凭据/默认/文件策略以 AI DB 与管理 API 为唯一源，凭据使用 AES-GCM 加密，独立 KEK 仅从私有 OS 环境读取；不再导入 `storage.yaml`，不回退旧 Nacos 存储凭据。DB/MQ/注册中心等基础运行配置继续由 Nacos 管理，模板只提交占位符。
 - 存储控制面读写统一要求活跃的 `PLATFORM_SUPER_ADMIN` 且具有 `user:auth:manage`。连接位置创建后不可变，凭据仅显式 KEEP/REPLACE；默认/历史 null 平台映射必须稳定，禁用上传不关闭历史读取，引用/default 配置禁删。任何外部探针先保存 requestId 意图，未知结果只读查回，不自动重放。

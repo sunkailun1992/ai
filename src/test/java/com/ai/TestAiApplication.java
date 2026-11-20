@@ -17,8 +17,10 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.redisson.spring.starter.RedissonAutoConfigurationV2;
 import org.redisson.spring.starter.RedissonAutoConfigurationV4;
 import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigurationExcludeFilter;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration;
+import org.springframework.boot.context.TypeExcludeFilter;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
@@ -46,14 +48,19 @@ import org.springframework.context.annotation.FilterType;
 })
 @ComponentScan(
         basePackages = "com.kellen",
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.REGEX,
-                pattern = {
-                        "com\\.kellen\\.AiApplication",
-                        "com\\.kellen\\.config\\.datasource\\..*",
-                        "com\\.kellen\\.config\\.redis\\..*"
-                }
-        )
+        // 与 @SpringBootApplication 的扫描一致：utils 的自动配置同在 com.kellen 包下，只能按自动配置的顺序与条件装配，不能被当成普通配置提前扫进来。
+        excludeFilters = {
+                @ComponentScan.Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+                @ComponentScan.Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class),
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = {
+                                "com\\.kellen\\.AiApplication",
+                                "com\\.kellen\\.config\\.datasource\\..*",
+                                "com\\.kellen\\.config\\.redis\\..*"
+                        }
+                )
+        }
 )
 @ConfigurationPropertiesScan(basePackageClasses = {
         AiProperties.class,

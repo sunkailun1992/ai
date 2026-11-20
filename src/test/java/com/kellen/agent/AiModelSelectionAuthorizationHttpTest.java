@@ -1,18 +1,17 @@
 package com.kellen.agent;
 
+import com.ai.support.FixtureUsers;
+import com.ai.support.ResourceServerFixture;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
 import com.kellen.auth.AiRequestIdentityResolver;
 import com.kellen.config.AiAgentClientProperties;
+import com.kellen.controlplane.AiControlPlaneAdministrator;
 import com.kellen.exception.ApiExceptionHandler;
-import com.kellen.rpc.auth.AuthSessionIdentityRpcDTO;
-import com.kellen.security.config.SecurityAuthConfig;
-import com.kellen.utils.auth.JwtKeyConfig;
-import com.kellen.utils.auth.JwtUtils;
 import org.apache.ibatis.session.SqlSessionFactory;
-import org.mybatis.spring.SqlSessionTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,12 +20,9 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.env.Environment;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
 import javax.sql.DataSource;
 import java.net.URI;
@@ -34,11 +30,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,138 +39,117 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** 真实 HTTP、安全过滤器、全局 advice 与 MyBatis-Plus/H2 持久化；仅替换 User RPC 和 Agent 边界。 */
+/**
+ * 默认模型是全局配置：真实 HTTP、资源服务器过滤链、全局 advice 与 MyBatis-Plus/H2 持久化，只放行平台超级管理员且有 user:auth:manage；
+ * 角色与权限码只来自 user 服务给的业务上下文，请求头伪造不了。只替换令牌解码、业务上下文与 Agent 边界。
+ */
 @SpringBootTest(classes = AiModelSelectionAuthorizationHttpTest.Config.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"spring.config.name=model-selection-authorization-isolated",
                 "spring.cloud.nacos.config.enabled=false", "spring.cloud.nacos.discovery.enabled=false",
-                "spring.cloud.nacos.config.import-check.enabled=false", "security.auth.enabled=true",
-                "security.auth.header-enabled=false", "test.model-selection.authorization.fixture=true"})
+                "spring.cloud.nacos.config.import-check.enabled=false", "test.model-selection.authorization.fixture=true",
+                ResourceServerFixture.ISSUER})
 class AiModelSelectionAuthorizationHttpTest {
     @LocalServerPort int port;
     @Autowired DataSource dataSource;
     @Autowired AiModelSelectionService service;
-    @Autowired SessionBoundary sessions;
+    @Autowired FixtureUsers users;
     private JdbcTemplate jdbc;
 
-    @DynamicPropertySource static void syntheticKey(DynamicPropertyRegistry registry) {
-        byte[] key = new byte[32]; new SecureRandom().nextBytes(key);
-        String encoded = Base64.getEncoder().encodeToString(key);
-        registry.add("security.jwt.secret", () -> encoded);
-    }
-
     @BeforeEach void resetFixture() {
-        sessions.mode = "active"; sessions.calls = 0;
+        users.put("platform-admin", "platform", "dept-p", "ROLE_PLATFORM_SUPER_ADMIN", "user:auth:manage");
+        users.put("tenant-admin", "tenant-a", "dept-a", "ROLE_TENANT_ADMIN", "user:auth:manage");
+        users.put("platform-without-permission", "platform", null, "ROLE_PLATFORM_SUPER_ADMIN");
+        users.put("plain-user", "tenant-a", null, "ROLE_NONE");
+        users.put("unprefixed-admin", "platform", null, "PLATFORM_SUPER_ADMIN", "user:auth:manage");
+        users.putDisabled("disabled-admin", "platform");
+        users.failFor("admin-while-user-service-down");
         jdbc = new JdbcTemplate(dataSource);
         jdbc.update("UPDATE ai_model_selection SET provider='google', updated_at=TIMESTAMP '2000-01-01 00:00:00'");
         service.initialize();
     }
 
-    @Test void anonymousAndInvalidSignatureCannotWrite() throws Exception {
-        assertThat(put(null, false).statusCode()).isIn(401, 403);
-        assertThat(put(token("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage")) + ".invalid", false).statusCode()).isIn(401, 403);
-        assertUnchanged();
+    @Test void anonymousAndInvalidTokensCannotWrite() throws Exception {
+        assertRejected(null, false, 401);
+        assertRejected("Bearer invalid", false, 401);
+        assertRejected(ResourceServerFixture.bearer("unknown-user"), false, 401);
     }
 
     @Test void normalUserCannotChangeTheGlobalProvider() throws Exception {
-        assertRejected(token("NONE", List.of()), false, 403);
+        assertRejected(ResourceServerFixture.bearer("plain-user"), false, 403);
     }
 
     @Test void tenantAdminEvenWithManagePermissionCannotChangeTheGlobalProvider() throws Exception {
-        assertRejected(token("TENANT_ADMIN", List.of("user:auth:manage")), false, 403);
+        assertRejected(ResourceServerFixture.bearer("tenant-admin"), false, 403);
     }
 
     @Test void platformAdminWithoutPermissionCannotWrite() throws Exception {
-        assertRejected(token("PLATFORM_SUPER_ADMIN", List.of()), false, 403);
+        assertRejected(ResourceServerFixture.bearer("platform-without-permission"), false, 403);
     }
 
-    @Test void forgedHeadersCannotElevateVerifiedClaims() throws Exception {
-        assertRejected(token("NONE", List.of()), true, 403);
+    @Test void forgedHeadersCannotElevateTheVerifiedContext() throws Exception {
+        assertRejected(ResourceServerFixture.bearer("plain-user"), true, 403);
     }
 
-    @Test void permissionStringOrRoleCannotStandInForVerifiedPermissionList() throws Exception {
-        assertRejected(token("PLATFORM_SUPER_ADMIN", "user:auth:manage"), false, 403);
+    @Test void adminTypeWithoutTheRolePrefixCannotStandInForTheRole() throws Exception {
+        assertRejected(ResourceServerFixture.bearer("unprefixed-admin"), false, 403);
     }
 
-    @Test void revokedTokenAndUserRpcFailureFailClosedWithoutPersistence() throws Exception {
-        String token = token("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage"));
-        for (String mode : List.of("revoked", "rpc-failure")) {
-            sessions.mode = mode; assertRejected(token, false, 401);
-        }
-    }
-
-    @Test void rpcIdentityMustMatchTheSameSignedToken() throws Exception {
-        for (String mode : List.of("different-user", "different-tenant")) {
-            sessions.mode = mode;
-            assertRejected(token("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage")), false, 401);
-        }
+    @Test void disabledAdministratorAndUserServiceFailureFailClosedWithoutPersistence() throws Exception {
+        assertRejected(ResourceServerFixture.bearer("disabled-admin"), false, 403);
+        assertRejected(ResourceServerFixture.bearer("admin-while-user-service-down"), false, 503);
     }
 
     @Test void activePlatformAdminWithPermissionCanPersistEvenTheCurrentProvider() throws Exception {
-        var response = put(token("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage")), false);
+        var response = put(ResourceServerFixture.bearer("platform-admin"), false);
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(jdbc.queryForObject("SELECT provider FROM ai_model_selection", String.class)).isEqualTo("google");
         assertThat(jdbc.queryForObject("SELECT updated_at FROM ai_model_selection", java.sql.Timestamp.class).toLocalDateTime().getYear()).isGreaterThan(2000);
-        assertThat(sessions.calls).isEqualTo(1);
-        assertThat(response.body()).contains("\"provider\":\"google\"").doesNotContain("Bearer", "accessToken");
+        assertThat(jdbc.queryForObject("SELECT update_by FROM ai_model_selection", String.class)).isEqualTo("platform-admin");
+        assertThat(response.body()).contains("\"provider\":\"google\"").doesNotContain("Bearer", "accessToken",
+                ResourceServerFixture.accessToken("platform-admin"));
     }
 
     @Test void authorizedUnsupportedProviderStillCannotPersist() throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/ai/model-selection"))
                 .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + token("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage")))
+                .header("Authorization", ResourceServerFixture.bearer("platform-admin"))
                 .PUT(HttpRequest.BodyPublishers.ofString("{\"provider\":\"other\"}"));
         var response = HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(400);
         assertUnchanged();
     }
 
-    private String token(String adminType, Object permissions) {
-        return JwtUtils.createJwt(UUID.randomUUID().toString(), "fixture-user", Map.of(
-                "userId", "fixture-user", "tenantId", "fixture-tenant", "adminType", adminType,
-                "permissions", permissions, "roles", List.of("user:auth:manage")));
-    }
-    private void assertRejected(String token, boolean forgedHeaders, int status) throws Exception {
-        var response = put(token, forgedHeaders);
+    private void assertRejected(String authorization, boolean forgedHeaders, int status) throws Exception {
+        var response = put(authorization, forgedHeaders);
         assertThat(response.statusCode()).isEqualTo(status);
-        assertThat(response.body()).doesNotContain("synthetic-private", "fixture-user", "fixture-tenant", "Exception", "Bearer");
+        assertThat(response.body()).doesNotContain("synthetic-private", "platform-admin", "tenant-admin", "plain-user",
+                "Exception", "Bearer ", "synthetic-access-token");
         assertUnchanged();
     }
+
     private void assertUnchanged() {
         assertThat(jdbc.queryForObject("SELECT provider FROM ai_model_selection", String.class)).isEqualTo("google");
         assertThat(jdbc.queryForObject("SELECT updated_at FROM ai_model_selection", java.sql.Timestamp.class).toLocalDateTime().getYear()).isEqualTo(2000);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_model_selection", Integer.class)).isEqualTo(1);
         assertThat(service.currentProvider()).isEqualTo("google");
     }
-    private HttpResponse<String> put(String token, boolean forgedHeaders) throws Exception {
+
+    private HttpResponse<String> put(String authorization, boolean forgedHeaders) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/ai/model-selection"))
                 .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json");
-        if (token != null) request.header("Authorization", "Bearer " + token);
+        if (authorization != null) request.header("Authorization", authorization);
         if (forgedHeaders) request.header("X-Admin-Type", "PLATFORM_SUPER_ADMIN")
-                .header("X-Permissions", "user:auth:manage").header("X-Tenant-Id", "forged-tenant")
-                .header("X-User-Id", "forged-user");
+                .header("X-Permissions", "user:auth:manage").header("X-User-Id", "platform-admin");
         return HttpClient.newHttpClient().send(request.PUT(HttpRequest.BodyPublishers.ofString("{\"provider\":\"google\"}"))
                 .build(), HttpResponse.BodyHandlers.ofString());
     }
-    static class SessionBoundary {
-        volatile String mode = "active";
-        volatile int calls;
-        AuthSessionIdentityRpcDTO resolve(String token) {
-            calls++;
-            if ("revoked".equals(mode)) throw new SecurityException("synthetic-private-revoked");
-            if ("rpc-failure".equals(mode)) throw new IllegalStateException("synthetic-private-rpc-address");
-            var claims = JwtUtils.parseJwt(token);
-            var identity = new AuthSessionIdentityRpcDTO();
-            identity.setUserId("different-user".equals(mode) ? "other-user" : claims.get("userId", String.class));
-            identity.setTenantId("different-tenant".equals(mode) ? "other-tenant" : claims.get("tenantId", String.class));
-            return identity;
-        }
-    }
+
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "test.model-selection.authorization.fixture", havingValue = "true")
-    @Import({AiModelSelectionController.class, AiModelSelectionService.class, ApiExceptionHandler.class, SecurityAuthConfig.class})
+    @Import({ResourceServerFixture.class, AiModelSelectionController.class, AiModelSelectionService.class, ApiExceptionHandler.class,
+            AiControlPlaneAdministrator.class, AiRequestIdentityResolver.class})
     @ImportAutoConfiguration({
-            org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterAutoConfiguration.class,
             org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebServerAutoConfiguration.class,
             org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration.class,
             org.springframework.boot.autoconfigure.context.ConfigurationPropertiesAutoConfiguration.class,
@@ -197,14 +169,15 @@ class AiModelSelectionAuthorizationHttpTest {
         }
         @Bean SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
             var config = new MybatisConfiguration(); config.setMapUnderscoreToCamelCase(true);
+            var global = com.baomidou.mybatisplus.core.toolkit.GlobalConfigUtils.defaults()
+                    .setMetaObjectHandler(new com.kellen.config.mybatis.MyMetaObjectHandler(new com.kellen.security.config.TenantProperties()));
+            com.baomidou.mybatisplus.core.toolkit.GlobalConfigUtils.setGlobalConfig(config, global);
             config.addMapper(AiModelSelectionRepository.class);
             var factory = new MybatisSqlSessionFactoryBean(); factory.setDataSource(dataSource); factory.setConfiguration(config);
+            factory.setGlobalConfig(global);
             return factory.getObject();
         }
         @Bean AiModelSelectionRepository repository(SqlSessionFactory factory) { return new SqlSessionTemplate(factory).getMapper(AiModelSelectionRepository.class); }
-        @Bean JwtKeyConfig jwtKeyConfig(Environment environment) { return new JwtKeyConfig(environment); }
-        @Bean SessionBoundary sessions() { return new SessionBoundary(); }
-        @Bean AiRequestIdentityResolver identities(SessionBoundary sessions) { return new AiRequestIdentityResolver(sessions::resolve); }
         @Bean AiAgentClientProperties properties() { return new AiAgentClientProperties(Duration.ofSeconds(5), "google"); }
         @Bean AiAgentClient agent() {
             var client = mock(AiAgentClient.class);

@@ -11,8 +11,6 @@ import com.kellen.memory.PatientMemoryService;
 import com.kellen.observability.AiModelCallObserver;
 import com.kellen.prompt.AiRolePromptService;
 import com.kellen.rag.RagRetrievalClient;
-import com.kellen.security.SecurityUser;
-import com.kellen.security.UserContextHolder;
 import com.kellen.traffic.CanaryContext;
 
 import io.opentelemetry.context.Context;
@@ -91,13 +89,11 @@ public class AiDialogueService {
         if (identity == null) return Flux.error(new SecurityException("AI_IDENTITY_REQUIRED"));
         Context entryParent = Context.current();
         CanaryContext.Snapshot canary = CanaryContext.get();
-        // 认证过滤器写入的本轮登录用户；收尾写库在 Reactor 线程上，审计字段（创建人、更新人、创建部门）要显式取它。
-        SecurityUser entryUser = UserContextHolder.get();
         return Flux.defer(() -> {
-            DialogueObservation observation = new DialogueObservation(entryParent, identity, entryUser);
+            DialogueObservation observation = new DialogueObservation(entryParent, identity);
             Flux<String> execution;
-            // 整轮 span 在 RAG/记忆预取前建立，Scope 仅覆盖当前线程的装配与订阅。
-            try (Scope ignored = observation.span.makeCurrent(); var tenant = identity.bindTenant()) {
+            // 整轮 span 在 RAG/记忆预取前建立，Scope 仅覆盖当前线程的装配与订阅；装配期的查询与写库同样显式绑定本轮身份。
+            try (Scope ignored = observation.span.makeCurrent(); var tenant = identity.bindTenant(); var user = identity.bindUser()) {
                 List<MediaInputValidator.ValidatedMedia> media = mediaInputValidator.validateUrlMedia(request.effectiveAttachments());
                 String normalizedConversationId = identity.conversationKey(request.conversationId());
                 execution = streamInternal(request.role(), request.message(), request.effectiveInstruction(), request.effectiveAttachments(),
@@ -175,8 +171,7 @@ public class AiDialogueService {
                         identity.userId(),
                         identity.tenantId(),
                         sourceTenantId,
-                        patientId,
-                        identity.accessToken()))
+                        patientId))
                 .doOnNext(content::append)
                 .doOnComplete(() -> observation.run(() -> {
                     String assistantContent = content.toString();
@@ -227,13 +222,11 @@ public class AiDialogueService {
         private final io.opentelemetry.api.trace.Tracer tracer = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("fleet.business");
         private final io.opentelemetry.api.trace.Span span;
         private final AiRequestIdentity identity;
-        private final SecurityUser entryUser;
         private final java.util.concurrent.atomic.AtomicBoolean ended = new java.util.concurrent.atomic.AtomicBoolean();
         private volatile boolean failed;
 
-        private DialogueObservation(Context parent, AiRequestIdentity identity, SecurityUser entryUser) {
+        private DialogueObservation(Context parent, AiRequestIdentity identity) {
             this.identity = identity;
-            this.entryUser = entryUser;
             span = tracer.spanBuilder("ai.dialogue.stream").setParent(parent).startSpan();
         }
 
@@ -261,7 +254,7 @@ public class AiDialogueService {
         /** 收尾信号可能落在任意复用的 Reactor 线程：写库期间绑定本轮租户与入口用户，结束后恢复该线程原值。 */
         private void run(Runnable action) {
             try (Scope ignored = span.makeCurrent(); var tenant = identity.bindTenant();
-                 var user = AiRequestIdentity.bindUser(entryUser)) {
+                 var user = identity.bindUser()) {
                 action.run();
             }
         }

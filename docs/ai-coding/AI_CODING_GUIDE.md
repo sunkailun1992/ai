@@ -29,7 +29,6 @@
 - `reuse-configuration.yaml`
 - `traffic-governance.yaml`
 - `actuator.yaml`
-- `security-jwt.yaml`
 - `swagger.yaml`
 - `ai-spring.yaml`
 - `mybatis-plus.yaml`
@@ -140,6 +139,6 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 
 ## Scoped AI 身份边界
 
-聊天及记忆读取/清理要求 User access JWT，由 User `AuthSessionRpcService` 复核完整生命周期与账号租户授权。不能把 `X-User-*`、正文 `sourceTenantId` 或历史默认 `100` 当作授权身份。入口捕获的不可变 subject/tenant 在每个执行线程短暂绑定并恢复；终端 token 只作为 Authorization header 转发给验签后的 Agent，不能进入正文或日志。
+聊天及记忆读取/清理要求 Keycloak 访问令牌，由 utils 资源服务器校验、经 user 服务取业务上下文（停用、租户不可访问返回 403）；控制器只经 `AiRequestIdentityResolver.current()` 取身份，不读 `Authorization` 头。不能把 `X-User-*`、正文 `sourceTenantId` 或历史默认 `100` 当作授权身份。入口捕获的不可变用户/租户/部门在每个执行线程短暂绑定并恢复；调 Agent 用 RFC 8693 令牌交换（`github-ai-agent`），令牌不能进入正文或日志，没换到令牌不调用 Agent。
 
 User 聊天按 authTenant + subject + 客户端原始 conversationId 建内部摘要键；客户端双轮继续原 ID，不能从 `fleet_` 前缀信任任意内部键。微信登录、owner 会话及旧上传管理路由已删除；不提供 User ID 到旧 owner 的隐式映射。普通附件继续使用可访问 URL 与通用 token view；不宣称已实现 User 直传管理 API。

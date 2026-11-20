@@ -107,7 +107,7 @@ class ChatAuditTenantPersistenceTest {
                     "question", "prompt", "failure", ""))
                     .isInstanceOf(IllegalArgumentException.class).hasMessage("AI_AUDIT_TENANT_INVALID");
         }
-        var overlong = new AiRequestIdentity("verified-user", "x".repeat(65), "synthetic-token");
+        var overlong = com.ai.support.TestIdentities.of("verified-user", "x".repeat(65));
         assertThatThrownBy(() -> audit.recordSuccess(overlong, "fixture", "chat_stream", "fixture-agent",
                 "question", "prompt", "answer", ""))
                 .isInstanceOf(IllegalArgumentException.class).hasMessage("AI_AUDIT_TENANT_INVALID");
@@ -123,7 +123,7 @@ class ChatAuditTenantPersistenceTest {
         assertThat(tenantProperties.isEnabled()).isFalse();
         // 同一执行线程复用两个租户；来源分区和 ambient 上下文均不能替代认证租户。
         for (String tenant : List.of("tenant-a", "0002-tenant-b")) {
-            var identity = new AiRequestIdentity("verified-user", tenant, "synthetic-token");
+            var identity = com.ai.support.TestIdentities.of("verified-user", tenant);
             var request = new AiChatRequest("same-client-conversation", null, null, "source-other",
                     "synthetic-question", null, null, List.of(), List.of());
             Flux<String> output = switch (terminal) {
@@ -132,7 +132,7 @@ class ChatAuditTenantPersistenceTest {
                 case CANCEL -> Flux.never();
             };
             when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(),
-                    any(), any(), any(), any(), any(), any(), any())).thenReturn(output.publishOn(worker));
+                    any(), any(), any(), any(), any(), any())).thenReturn(output.publishOn(worker));
             TenantContextHolder.setTenantId("untrusted-entry");
             TenantContextHolder.ignore();
             Flux<String> stream = dialogue.stream(request, identity);
@@ -180,7 +180,7 @@ class ChatAuditTenantPersistenceTest {
         var stale = new SecurityUser("prior-user", "prior", "prior-tenant", "prior-dept", "ALL", List.of(), List.of());
         Mono.fromRunnable(() -> UserContextHolder.set(stale)).subscribeOn(worker).block(Duration.ofSeconds(2));
         var requester = new SecurityUser("verified-user", "fixture", "tenant-a", "dept-a", "ALL", List.of(), List.of());
-        var identity = new AiRequestIdentity("verified-user", "tenant-a", "synthetic-token");
+        var identity = new AiRequestIdentity(requester);
         var request = new AiChatRequest("user-context-conversation", null, null, "source-other",
                 "synthetic-question", null, null, List.of(), List.of());
         Flux<String> output = switch (terminal) {
@@ -189,7 +189,7 @@ class ChatAuditTenantPersistenceTest {
             case CANCEL -> Flux.never();
         };
         when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any())).thenReturn(output.publishOn(worker));
+                any(), any(), any(), any(), any(), any())).thenReturn(output.publishOn(worker));
         UserContextHolder.set(requester);
         Flux<String> stream = dialogue.stream(request, identity);
         switch (terminal) {
@@ -215,7 +215,7 @@ class ChatAuditTenantPersistenceTest {
         // Reactor/Netty 的 worker 在首次订阅时才新建并按 TTL 复制当前线程的值；订阅期间不能带着入口用户。
         var inherited = new AtomicReference<Object>("worker-not-started");
         when(agent.patientAnalysisStream(any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any())).thenReturn(Flux.defer(() -> {
+                any(), any(), any(), any(), any(), any())).thenReturn(Flux.defer(() -> {
                     Thread created = new Thread(() -> inherited.set(Optional.ofNullable(UserContextHolder.get())));
                     created.start();
                     try {
@@ -229,7 +229,7 @@ class ChatAuditTenantPersistenceTest {
         UserContextHolder.set(requester);
         var request = new AiChatRequest("subscribe-conversation", null, null, "source-other",
                 "synthetic-question", null, null, List.of(), List.of());
-        assertThat(dialogue.stream(request, new AiRequestIdentity("verified-user", "tenant-a", "synthetic-token"))
+        assertThat(dialogue.stream(request, new AiRequestIdentity(requester))
                 .collectList().block(Duration.ofSeconds(2))).containsExactly("synthetic-answer");
         assertThat(inherited.get()).isEqualTo(Optional.empty());
         assertThat(UserContextHolder.get()).isSameAs(requester);

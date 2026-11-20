@@ -1,92 +1,74 @@
 package com.kellen.controlplane;
 
+import com.ai.support.TestIdentities;
 import com.kellen.auth.AiRequestIdentityResolver;
-import com.kellen.rpc.auth.AuthSessionIdentityRpcDTO;
-import com.kellen.utils.auth.JwtKeyConfig;
-import com.kellen.utils.auth.JwtUtils;
-import org.junit.jupiter.api.BeforeEach;
+import com.kellen.security.oauth2.FleetAuthenticationToken;
+import com.kellen.security.oauth2.SecurityContextResult;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.mock.env.MockEnvironment;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.SecureRandom;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** 真实 JWT 签验与身份解析，只替换 User RPC；不访问真实认证中心或配置。 */
+/** 控制面管理门禁：只认资源服务器写入的业务上下文权限（user 服务给的权限码与 ROLE_ 角色），平台超级管理员且有 user:auth:manage 才放行。 */
 class AiControlPlaneAdministratorTest {
-    private AiControlPlaneAdministrator administrator;
-    private String resolvedUser;
-    private String resolvedTenant;
-    private boolean revoked;
+    private final AiControlPlaneAdministrator administrator = new AiControlPlaneAdministrator(new AiRequestIdentityResolver());
 
-    @BeforeEach void initialize() {
-        byte[] bytes = new byte[32]; new SecureRandom().nextBytes(bytes);
-        new JwtKeyConfig(new MockEnvironment().withProperty("security.jwt.secret", Base64.getEncoder().encodeToString(bytes)));
-        resolvedUser = "fixture-user"; resolvedTenant = "fixture-tenant"; revoked = false;
-        administrator = new AiControlPlaneAdministrator(new AiRequestIdentityResolver(token -> {
-            if (revoked) throw new SecurityException("synthetic-private-revoked");
-            JwtUtils.parseJwt(token);
-            var identity = new AuthSessionIdentityRpcDTO();
-            identity.setUserId(resolvedUser); identity.setTenantId(resolvedTenant);
-            return identity;
-        }));
-    }
+    @AfterEach void clear() { SecurityContextHolder.clearContext(); }
 
     @Test void onlyActivePlatformAdministratorWithManagePermissionPasses() {
-        var identity = administrator.require(bearer("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage")));
+        signIn(SecurityContextResult.Status.OK, "ROLE_PLATFORM_SUPER_ADMIN", "user:auth:manage", "ROLE_manager");
+        var identity = administrator.require();
         assertThat(identity.userId()).isEqualTo("fixture-user");
         assertThat(identity.tenantId()).isEqualTo("fixture-tenant");
         assertThat(identity.toString()).doesNotContain("Bearer", "fixture-user", "fixture-tenant");
     }
 
     @Test void tenantAdministratorWithTheSamePermissionCannotManageGlobalConfiguration() {
-        rejected(bearer("TENANT_ADMIN", List.of("user:auth:manage")), HttpStatus.FORBIDDEN);
+        signIn(SecurityContextResult.Status.OK, "ROLE_TENANT_ADMIN", "user:auth:manage");
+        rejected(HttpStatus.FORBIDDEN);
     }
 
     @Test void platformAdministratorWithoutManagePermissionCannotPass() {
-        rejected(bearer("PLATFORM_SUPER_ADMIN", List.of()), HttpStatus.FORBIDDEN);
+        signIn(SecurityContextResult.Status.OK, "ROLE_PLATFORM_SUPER_ADMIN");
+        rejected(HttpStatus.FORBIDDEN);
     }
 
-    @Test void normalUserCannotPassEvenWithManageRoleName() {
-        rejected(bearer("NONE", List.of()), HttpStatus.FORBIDDEN);
+    @Test void normalUserCannotPass() {
+        signIn(SecurityContextResult.Status.OK, "ROLE_NONE", "user:auth:resources");
+        rejected(HttpStatus.FORBIDDEN);
     }
 
-    @Test void permissionStringIsNotARecognizedPermissionCollection() {
-        rejected(bearer("PLATFORM_SUPER_ADMIN", "user:auth:manage"), HttpStatus.FORBIDDEN);
+    @Test void adminTypeWithoutTheRolePrefixIsNotARole() {
+        signIn(SecurityContextResult.Status.OK, "PLATFORM_SUPER_ADMIN", "user:auth:manage");
+        rejected(HttpStatus.FORBIDDEN);
     }
 
-    @Test void signedClaimsMustMatchTheActivelyResolvedUserAndTenant() {
-        String authorization = bearer("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage"));
-        resolvedUser = "other-user"; rejected(authorization, HttpStatus.UNAUTHORIZED);
-        resolvedUser = "fixture-user"; resolvedTenant = "other-tenant";
-        rejected(authorization, HttpStatus.UNAUTHORIZED);
+    @Test void missingOrInactiveIdentityIsUnauthenticated() {
+        rejected(HttpStatus.UNAUTHORIZED);
+        signIn(SecurityContextResult.Status.DISABLED, "ROLE_PLATFORM_SUPER_ADMIN", "user:auth:manage");
+        rejected(HttpStatus.UNAUTHORIZED);
     }
 
-    @Test void revokedIdentityCannotPassAnOtherwiseValidSignedToken() {
-        String authorization = bearer("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage"));
-        revoked = true; rejected(authorization, HttpStatus.UNAUTHORIZED);
+    private static void signIn(SecurityContextResult.Status status, String... authorities) {
+        Instant now = Instant.now();
+        Jwt jwt = Jwt.withTokenValue("synthetic-access-token").header("alg", "RS256").claim("user_id", "fixture-user")
+                .issuedAt(now).expiresAt(now.plusSeconds(300)).build();
+        var user = TestIdentities.user("fixture-user", "fixture-tenant", "fixture-dept", authorities);
+        var result = status == SecurityContextResult.Status.OK ? SecurityContextResult.ok(user) : SecurityContextResult.of(status);
+        var granted = status == SecurityContextResult.Status.OK ? AuthorityUtils.createAuthorityList(authorities) : AuthorityUtils.NO_AUTHORITIES;
+        SecurityContextHolder.getContext().setAuthentication(new FleetAuthenticationToken(jwt, result, granted, "fixture-user"));
     }
 
-    @Test void missingAndInvalidSignedTokensCannotPass() {
-        rejected(null, HttpStatus.UNAUTHORIZED);
-        rejected(bearer("PLATFORM_SUPER_ADMIN", List.of("user:auth:manage")) + ".invalid", HttpStatus.UNAUTHORIZED);
-    }
-
-    private String bearer(String adminType, Object permissions) {
-        return "Bearer " + JwtUtils.createJwt(UUID.randomUUID().toString(), "fixture-user", Map.of(
-                "userId", "fixture-user", "tenantId", "fixture-tenant", "adminType", adminType,
-                "permissions", permissions, "roles", List.of("user:auth:manage")));
-    }
-
-    private void rejected(String authorization, HttpStatus status) {
-        assertThatThrownBy(() -> administrator.require(authorization))
+    private void rejected(HttpStatus status) {
+        assertThatThrownBy(administrator::require)
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         failure -> assertThat(failure.getStatusCode()).isEqualTo(status));
     }

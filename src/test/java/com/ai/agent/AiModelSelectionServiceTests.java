@@ -1,10 +1,10 @@
 package com.ai.agent;
 
 import com.kellen.agent.AiModelSelectionEntity;
-import com.kellen.auth.AiRequestIdentityResolver;
 import com.kellen.agent.AiModelSelectionRepository;
 import com.kellen.agent.AiModelSelectionService;
 import com.kellen.config.AiAgentClientProperties;
+import com.kellen.controlplane.AiControlPlaneAdministrator;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.BadSqlGrammarException;
 
@@ -25,7 +25,7 @@ class AiModelSelectionServiceTests {
         when(repository.findByConfigKey("default-agent-provider")).thenReturn(Optional.empty());
         when(repository.save(any(AiModelSelectionEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         AiModelSelectionService service = new AiModelSelectionService(
-                new AiAgentClientProperties(Duration.ofSeconds(8), "qwen"), repository, mock(AiRequestIdentityResolver.class));
+                new AiAgentClientProperties(Duration.ofSeconds(8), "qwen"), repository, mock(AiControlPlaneAdministrator.class));
         service.initialize();
 
         assertEquals("qwen", service.currentProvider());
@@ -40,7 +40,7 @@ class AiModelSelectionServiceTests {
                 new SQLSyntaxErrorException("Table 'ai.ai_model_selection' doesn't exist")
         ));
         AiModelSelectionService service = new AiModelSelectionService(
-                new AiAgentClientProperties(Duration.ofSeconds(8), "deepseek"), repository, mock(AiRequestIdentityResolver.class));
+                new AiAgentClientProperties(Duration.ofSeconds(8), "deepseek"), repository, mock(AiControlPlaneAdministrator.class));
 
         service.initialize();
 

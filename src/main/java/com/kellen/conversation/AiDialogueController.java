@@ -6,7 +6,7 @@ import com.kellen.memory.ChatMemoryMessageDto;
 import com.kellen.rag.RagRetrievalClient;
 
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,15 +51,13 @@ public class AiDialogueController {
     /**
      * SSE 流式对话，支持纯文本和远程媒体 URL。
      *
-     * @param authorization User 中心签发的有效 Bearer access JWT。
-     * @param request       用户文本、可选会话 ID、角色、本轮补充要求和远程附件 URL。
+     * @param request 用户文本、可选会话 ID、角色、本轮补充要求和远程附件 URL；身份取资源服务器已验证的登录用户。
      * @return 模型逐段输出的文本流。
      */
     @PostMapping(value = "/chat", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> chat(@RequestHeader(value = "Authorization", required = false) String authorization,
-                             @RequestBody AiChatRequest request) {
+    public Flux<ServerSentEvent<String>> chat(@RequestBody AiChatRequest request) {
         try {
-            var identity = identities.requireIdentity(authorization);
+            var identity = identities.current();
             return dialogueService.stream(request, identity)
                     .map(text -> ServerSentEvent.builder(text).build())
                     .onErrorResume(error -> Flux.just(streamError(error)));
@@ -75,6 +73,9 @@ public class AiDialogueController {
             message = "\n[AI Agent 调用失败] 请稍后重试";
         } else if (error instanceof RagRetrievalClient.CanaryUnavailableException) {
             message = "\n[灰度 RAG 检索不可用] 请稍后重试";
+        } else if (agentTokenUnavailable(error)) {
+            // 令牌交换失败（Keycloak 拒绝、不可达或超时）：没有调用 ai-agent；不回显 OAuth2 错误原文与令牌端点地址。
+            message = "\n[AI Agent 令牌获取失败] 请稍后重试";
         } else if (error instanceof IllegalArgumentException) {
             message = "\n[请求参数错误] 请求参数无效，请检查后重试。";
         } else {
@@ -87,6 +88,15 @@ public class AiDialogueController {
         return ServerSentEvent.<String>builder().event("error").data(message).build();
     }
 
+    private static boolean agentTokenUnavailable(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof OAuth2AuthorizationException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 查询指定会话当前可注入模型的记忆消息。
      *
@@ -94,9 +104,8 @@ public class AiDialogueController {
      * @return 按时间正序排列的记忆消息列表。
      */
     @GetMapping("/memory/{conversationId}") // 记忆查询接口。
-    public List<ChatMemoryMessageDto> memory(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                           @PathVariable String conversationId) {
-        var identity = identities.requireIdentity(authorization);
+    public List<ChatMemoryMessageDto> memory(@PathVariable String conversationId) {
+        var identity = identities.current();
         try (var tenant = identity.bindTenant()) {
             return dialogueService.memoryMessages(identity.conversationKey(conversationId));
         }
@@ -109,9 +118,8 @@ public class AiDialogueController {
      * @return 清空结果的统一响应。
      */
     @DeleteMapping("/memory/{conversationId}") // 记忆清空接口。
-    public AiChatResponse clearMemory(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                      @PathVariable String conversationId) {
-        var identity = identities.requireIdentity(authorization);
+    public AiChatResponse clearMemory(@PathVariable String conversationId) {
+        var identity = identities.current();
         try (var tenant = identity.bindTenant()) {
             return dialogueService.clearMemory(identity.conversationKey(conversationId));
         }
