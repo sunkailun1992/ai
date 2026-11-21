@@ -17,8 +17,7 @@ import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
  * <p>ai 作为 fleet 成员与 user/message 同构：根包 {@code com.kellen} 全量组件扫描，
  * 复用 utils 的动态数据源、MyBatis 配置、统一响应/异常、公共工具等共享能力。
  * 数据源由 utils 动态数据源接管，因此排除 Spring 默认数据源自动配置；
- * 聊天/记忆入口显式调用
- * User RPC 验证 access JWT，不依赖全局 Security 链开关或用户/租户请求头。</p>
+ * 身份由 utils 的 Keycloak 资源服务器给出（访问令牌加 user 服务的业务上下文），不信任用户/租户请求头。</p>
  */
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class}) // 数据源交给 utils 动态数据源，排除 Spring 默认数据源自动配置。
 @EnableDubbo // 开启 Dubbo 服务发布和引用扫描，RPC 共享配置由 Nacos dubbo.yaml 提供。

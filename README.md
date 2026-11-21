@@ -182,6 +182,8 @@ PostgreSQL 启动修复补丁版本为 `1.6.4`，公共依赖精确固定 `com:u
 
 `1.9.0` 是第5阶段（不兼容）：公共依赖升到 `com:utils:2.0.1` 与 `com:rpc-api:2.0.0`，身份改由 Keycloak 资源服务器给出；删除旧会话 RPC 客户端、HMAC 服务签名（`X-Open-*`）与 `ai.agent-client.auth.*` 配置，调 ai-agent 改为令牌交换；控制器不再读 `Authorization` 头，三处平台管理门禁统一为 `ROLE_PLATFORM_SUPER_ADMIN` 加 `user:auth:manage`；profile 不再导入 `security-jwt.yaml`。需与 ai-agent 0.4.0、网关 BFF 一起切换。
 
+`1.9.1` 调 ai-agent 时带 `X-Tenant-Id`（本轮已验证的活动租户）：ai-agent 0.4.0 起是 utils 资源服务器，按它经 user 业务上下文核实活动租户，多租户用户选了非默认租户时正文租户才对得上；启动类说明改为资源服务器。
+
 ### AI 可信身份与会话隔离
 
 `/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 要求 Keycloak（`github-dev` 域）签发、受众 `github-api` 的访问令牌。校验由 utils 2.0.x 的资源服务器完成（签发方、受众、有效期、只收 RS256），再经 Dubbo 向 user 服务取业务上下文（用户、活动租户、部门、权限码与角色，`X-Tenant-Id` 只能在用户所属租户里选）；停用用户与不可访问的租户返回 403。控制器经 `AiRequestIdentityResolver.current()` 取本轮身份，不读 `Authorization` 头。匿名、伪造用户/租户头与无效令牌不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。

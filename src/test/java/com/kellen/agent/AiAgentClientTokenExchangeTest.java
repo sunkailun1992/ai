@@ -163,6 +163,8 @@ class AiAgentClientTokenExchangeTest {
             assertThat(call.path()).isEqualTo(AgentStub.STREAM_PATH);
             assertThat(call.headers().get("authorization")).isEqualTo("Bearer exchanged-" + ISSUED.get());
             assertThat(call.headers().keySet()).noneMatch(name -> name.startsWith("x-open-"));
+            // ai-agent 的资源服务器按 X-Tenant-Id 经 user 业务上下文核实活动租户，必须与本轮已验证的租户一致。
+            assertThat(call.headers().get("x-tenant-id")).isEqualTo("t1");
             assertThat(call.body()).contains("\"userId\":\"u-exchange\"", "\"tenantId\":\"t1\"")
                     .doesNotContain(ResourceServerFixture.accessToken("u-exchange"));
         });

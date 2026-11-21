@@ -124,6 +124,10 @@ public class AiAgentClient {
             if (canary != null) {
                 outgoing.header(CanaryGrant.HEADER, canaryRoute.authorize(canary));
             }
+            if (StringUtils.hasText(tenantId)) {
+                // ai-agent 的资源服务器按 X-Tenant-Id 经 user 业务上下文核实活动租户，与正文的租户一致才放行。
+                outgoing.header("X-Tenant-Id", text(tenantId));
+            }
             return outgoing.header("X-AI-Stream-Protocol", "typed-sse-v1")
                     .accept(MediaType.TEXT_EVENT_STREAM).exchangeToFlux(response -> {
                 if (response.statusCode().isError()) {
