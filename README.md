@@ -186,6 +186,8 @@ PostgreSQL 启动修复补丁版本为 `1.6.4`，公共依赖精确固定 `com:u
 
 `1.9.2` 将公共依赖从 `com:utils:2.0.1` 升到 `2.0.5`，修复业务上下文的 Dubbo 引用：此前 utils 把引用写成资源服务器自动配置里的嵌套配置，本服务主类在 `com.kellen` 包、默认组件扫描覆盖 utils，嵌套配置被提前当作普通配置处理，早于 `@EnableDubbo` 登记引用注解处理器，引用建不出来，所有用户令牌都按“用户不存在”返回 401（2.0.4 改为单独的自动配置，只由 imports 文件加载）；引用与本服务其他 Dubbo 引用一样在启动时不初始化（2.0.5，`init = false`），第一次需要业务上下文的请求才初始化并连接。另带上 2.0.3 的受保护资源元数据（`authorization_servers` 声明为 Keycloak 签发方）；完整上下文测试不配注册中心，2.0.5 起照常启动。本服务代码不变。
 
+`1.9.3` 去掉 dev、test、prod 三套配置里 Nacos 账号与口令的默认值（原为 `nacos`，即 Nacos 管理员账号）：`custom.nacos-username`、`custom.nacos-password` 只引用 `GITHUB_NACOS_USERNAME`、`GITHUB_NACOS_PASSWORD`，缺值时启动即失败，不再静默以管理员登录（CWE-1392 默认凭据）；值由私有环境提供（IDEA 的 env 文件、Jar 的 application.properties 或容器同名环境变量）。
+
 ### AI 可信身份与会话隔离
 
 `/api/ai/chat` 和 `/api/ai/memory/{conversationId}` 要求 Keycloak（`github-dev` 域）签发、受众 `github-api` 的访问令牌。校验由 utils 2.0.x 的资源服务器完成（签发方、受众、有效期、只收 RS256），再经 Dubbo 向 user 服务取业务上下文（用户、活动租户、部门、权限码与角色，`X-Tenant-Id` 只能在用户所属租户里选）；停用用户与不可访问的租户返回 403。控制器经 `AiRequestIdentityResolver.current()` 取本轮身份，不读 `Authorization` 头。匿名、伪造用户/租户头与无效令牌不能开启 scoped RAG/Memory。`sourceTenantId` 仍是业务来源分区，不是授权身份。
