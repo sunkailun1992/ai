@@ -72,7 +72,8 @@ class AiModelSelectionAuthorizationHttpTest {
     @Test void anonymousAndInvalidTokensCannotWrite() throws Exception {
         assertRejected(null, false, 401);
         assertRejected("Bearer invalid", false, 401);
-        assertRejected(ResourceServerFixture.bearer("unknown-user"), false, 401);
+        // 令牌有效但 user 里没有这个用户（账号未开通）：utils 2.0.8 起按 RFC 6750 §3.1 回 403，不再 401。
+        assertRejected(ResourceServerFixture.bearer("unknown-user"), false, 403);
     }
 
     @Test void normalUserCannotChangeTheGlobalProvider() throws Exception {

@@ -70,7 +70,8 @@ class AiIdentityHttpTest {
         assertThat(send(null, "X-User-Id", "user-a", "X-Tenant-Id", "tenant-a").statusCode()).isEqualTo(401);
         assertThat(send("Bearer invalid").statusCode()).isEqualTo(401);
         assertThat(send("Bearer opaque-wechat-session").statusCode()).isEqualTo(401);
-        assertThat(send(ResourceServerFixture.bearer("unknown-user")).statusCode()).isEqualTo(401);
+        // 令牌有效但 user 里没有这个用户（账号未开通）：utils 2.0.8 起按 RFC 6750 §3.1 回 403，不再 401。
+        assertThat(send(ResourceServerFixture.bearer("unknown-user")).statusCode()).isEqualTo(403);
     }
 
     @Test void disabledUsersAndForeignTenantsAreForbidden() throws Exception {
