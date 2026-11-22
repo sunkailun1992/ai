@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS ai_wechat_user (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS ai_wechat_session (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS ai_file_object (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1',
     create_dept varchar(64)
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_conversation (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_conversation_message (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_memory (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1',
     create_dept varchar(64)
@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_memory_summary (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '100',
     create_dept varchar(64)
@@ -198,7 +198,7 @@ CREATE TABLE IF NOT EXISTS ai_patient_memory (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '100',
     create_dept varchar(64)
@@ -226,7 +226,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_message (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1',
     create_dept varchar(64)
@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS ai_role_prompt (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1',
     create_dept varchar(64)
@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS ai_model_selection (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1',
     create_dept varchar(64)
@@ -300,7 +300,7 @@ CREATE TABLE IF NOT EXISTS ai_questionnaire_template (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -326,7 +326,7 @@ CREATE TABLE IF NOT EXISTS ai_questionnaire_session (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -352,7 +352,7 @@ CREATE TABLE IF NOT EXISTS ai_questionnaire_answer (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -380,7 +380,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_outbox (
     type int DEFAULT 0,
     state int DEFAULT 1,
     label varchar(255),
-    sorting int DEFAULT 0,
+    sort int DEFAULT 0,
     version int DEFAULT 1,
     tenant_id varchar(64) NOT NULL DEFAULT '1'
 );
@@ -397,7 +397,7 @@ CREATE TABLE IF NOT EXISTS ai_storage_configuration (
     create_by VARCHAR(255), update_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_by VARCHAR(255), is_deleted BOOLEAN NOT NULL DEFAULT false,
     type INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 1,
-    label VARCHAR(255), sorting INTEGER NOT NULL DEFAULT 0,
+    label VARCHAR(255), sort INTEGER NOT NULL DEFAULT 0,
     version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM',
     create_dept VARCHAR(64)
 );
@@ -412,7 +412,7 @@ CREATE TABLE IF NOT EXISTS ai_storage_setting (
     create_by VARCHAR(255), update_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_by VARCHAR(255), is_deleted BOOLEAN NOT NULL DEFAULT false,
     type INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 1,
-    label VARCHAR(255), sorting INTEGER NOT NULL DEFAULT 0,
+    label VARCHAR(255), sort INTEGER NOT NULL DEFAULT 0,
     version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM',
     create_dept VARCHAR(64)
 );
@@ -429,7 +429,7 @@ CREATE TABLE IF NOT EXISTS ai_storage_operation (
     create_by VARCHAR(255), update_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_by VARCHAR(255), is_deleted BOOLEAN NOT NULL DEFAULT false,
     type INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 1,
-    label VARCHAR(255), sorting INTEGER NOT NULL DEFAULT 0,
+    label VARCHAR(255), sort INTEGER NOT NULL DEFAULT 0,
     version BIGINT NOT NULL DEFAULT 1, tenant_id VARCHAR(64) NOT NULL DEFAULT 'PLATFORM'
 , UNIQUE(actor_id,request_id),
     create_dept VARCHAR(64)

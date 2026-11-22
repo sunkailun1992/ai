@@ -70,7 +70,7 @@ fleet 各 Java 微服务共用一套通用编码规则（各仓库的 `docs/ai-c
 
 - 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。
 - Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。
-- 不删除公共治理列（`id`、`code`、`description`、审计列、`is_deleted`、`label`、`sorting`、`version`、`tenant_id`、`create_dept`），旧列只改名；删其它列或整表的迁移先在 `DO` 块里核对整列（或整表）为空，不为空就 `RAISE EXCEPTION` 让整版回滚（先例：`V4__drop_unused_tables_and_unify_audit_time.sql`）。
+- 不删除公共治理列（`id`、`code`、`description`、审计列、`is_deleted`、`label`、`sort`、`version`、`tenant_id`、`create_dept`），旧列只改名；删其它列或整表的迁移先在 `DO` 块里核对整列（或整表）为空，不为空就 `RAISE EXCEPTION` 让整版回滚（先例：`V4__drop_unused_tables_and_unify_audit_time.sql`）。
 - 脚本必须可重复执行：`IF NOT EXISTS`、`INSERT ... ON CONFLICT DO NOTHING` 或带明确主键/租户条件的确定性 `UPDATE`；`ADD COLUMN IF NOT EXISTS` 只解决重复执行，仍须核对实际列结构。
 - 历史 MySQL 脚本（`src/main/resources/db/` 根下的 `*.sql`）不回改、不在 PostgreSQL 执行。
 - 新增字段同步 PostgreSQL 字段中文注释（`COMMENT ON COLUMN`）和 `src/test/resources/schema.sql`。
