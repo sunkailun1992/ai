@@ -138,6 +138,8 @@ NACOS_USERNAME=nacos NACOS_PASSWORD=nacos bash scripts/check-nacos-ai-config.sh
 
 表结构只由本服务 `src/main/resources/db/migration` 的 Flyway 迁移管理；已提交的迁移文件不修改，改结构只新增 `V<下一个>__<说明>.sql`；新库保持空库，由服务首次启动时的 Flyway 建表，不手工执行任何公共脚本。迁移为 V1 现有结构快照（含存储设置初始行，只在空库执行）、V2 删除 `ddl_history`、V3 审计列改名、V4 删除没人读写的列、V5 删除 8 张没人读写的空表并把存储三表的审计时间统一为 `timestamp(0)`；已有的库由 `baseline-on-migrate` 把版本 1 登记为基线。Seata AT 的 `undo_log` 在 `V1__baseline.sql` 里；数据源块固定 `spring.datasource.dynamic.seata: true`，不设总开关；建池时 Seata AT 代理就检查该表，utils 在创建任何 Bean 之前先执行 Flyway 迁移，新空库首次启动即建出该表。个人空库不自动导入业务角色种子；Java 演示种子须显式设置 `ai.bootstrap.seed-demo-content=true`。快速业务回归使用 H2；PostgreSQL 差异另由真实 PG 测试验证。
 
+排序列改名（第6阶段第三部分，1.9.6）：`V8__rename_sorting_to_sort.sql` 把 10 张表的 `sorting` 改名 `sort`，对应 utils 2.0.9 的 `EntityBase.sort`。Flyway 社区版没有撤销迁移，这次也没有改名前的备份（迁移在服务启动时先执行了），所以回退不靠还原备份，而是反向改名：停掉依赖 utils 2.0.9 的服务；确认 `undo_log` 为空（Seata AT 的回滚镜像记的是列名）；在一个事务里把这 10 张表的 `sort` 改回 `sorting`，并删掉 `flyway_schema_history` 里 V8 这一条（不删的话旧服务照样能启动，但以后重新升级时 V8 不会再跑，新代码就找不到 `sort` 列）；本服务换回 1.9.5、utils 换回 2.0.8，admin-web 同时退回 1.2.3。逐库回退脚本与手册由维护者保存在本机备份目录，不进本仓库。
+
 
 PostgreSQL 数据源用 dynamic-datasource 原生配置：`application.yml` 的 `spring.datasource.dynamic` 块放连接池与 Seata 参数，Nacos 的 `spring.datasource.dynamic.datasource.master/gray` 放地址与账号，驱动为 `org.postgresql.Driver`；JDBC URL 不带 `connectTimeout`、`socketTimeout`。字符字段使用 ICU `fleet_general_ci` 保留常用大小写、重音不敏感的等值、唯一键和 `LIKE` 查询；这不等于完整复刻 MySQL Unicode 权重或尾空格规则，迁移前必须检查唯一键碰撞和尾空格。PG 18 的 nondeterministic collation 支持 `LIKE`，不要将现有查询改成不支持该排序规则的 `ILIKE` 或正则匹配。
 
